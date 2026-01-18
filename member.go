@@ -74,7 +74,8 @@ type memberResponse struct {
 	} `json:"member"`
 }
 
-// GetMember retrieves the member profile using GraphQL.
+// GetMember retrieves basic member profile information (name, email).
+// Use GetMemberFull for complete profile including address and cards.
 func (c *Client) GetMember(ctx context.Context) (*Member, error) {
 	var resp memberResponse
 	if err := c.doGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {
@@ -91,7 +92,8 @@ func (c *Client) GetMember(ctx context.Context) (*Member, error) {
 	return member, nil
 }
 
-// GetMemberFull retrieves the full member profile including address and cards.
+// GetMemberFull retrieves the complete member profile including address,
+// loyalty cards (Bonus, Gall & Gall), and customer segmentation data.
 func (c *Client) GetMemberFull(ctx context.Context) (*MemberFull, error) {
 	var resp memberResponse
 	if err := c.doGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {
@@ -121,7 +123,8 @@ func (c *Client) GetMemberFull(ctx context.Context) (*MemberFull, error) {
 	}, nil
 }
 
-// GetBonusCard retrieves the bonus card number from the member profile.
+// GetBonusCard retrieves the AH Bonuskaart (loyalty card) information.
+// Returns the 13-digit card number and whether a card is linked to the account.
 func (c *Client) GetBonusCard(ctx context.Context) (*BonusCard, error) {
 	var resp memberResponse
 	if err := c.doGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {

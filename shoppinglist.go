@@ -19,9 +19,9 @@ type listResponse struct {
 	} `json:"productImages"`
 }
 
-// GetShoppingLists retrieves all shopping lists.
-// The API requires a productId parameter but returns all lists regardless.
-// Pass 0 to use a default product ID.
+// GetShoppingLists retrieves all shopping lists for the authenticated user.
+// The API quirk requires a productId parameter, but returns all lists regardless.
+// Pass 0 to use a default product ID (recommended).
 func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]ShoppingList, error) {
 	if productID <= 0 {
 		productID = 1 // Default product ID - API requires it but returns all lists
@@ -45,8 +45,8 @@ func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]Shoppin
 	return lists, nil
 }
 
-// GetShoppingList retrieves the first shopping list.
-// Use GetShoppingLists to get all lists if you have multiple.
+// GetShoppingList retrieves the first (default) shopping list.
+// Use GetShoppingLists if you need to access multiple lists.
 func (c *Client) GetShoppingList(ctx context.Context) (*ShoppingList, error) {
 	lists, err := c.GetShoppingLists(ctx, 0)
 	if err != nil {
@@ -60,8 +60,8 @@ func (c *Client) GetShoppingList(ctx context.Context) (*ShoppingList, error) {
 	return &lists[0], nil
 }
 
-// AddToShoppingList adds items to the shopping list.
-// Note: The exact endpoint for adding items needs discovery.
+// AddToShoppingList adds items to the default shopping list.
+// Items can be products (with ProductID) or free-text entries (with Name).
 func (c *Client) AddToShoppingList(ctx context.Context, items []ListItem) error {
 	body := map[string]any{
 		"items": items,
@@ -74,7 +74,8 @@ func (c *Client) AddToShoppingList(ctx context.Context, items []ListItem) error 
 	return nil
 }
 
-// AddProductToShoppingList adds a product to the shopping list by product ID.
+// AddProductToShoppingList adds a product to the default shopping list.
+// This is a convenience wrapper around AddToShoppingList.
 func (c *Client) AddProductToShoppingList(ctx context.Context, productID int, quantity int) error {
 	if quantity <= 0 {
 		quantity = 1
@@ -88,7 +89,8 @@ func (c *Client) AddProductToShoppingList(ctx context.Context, productID int, qu
 	return c.AddToShoppingList(ctx, items)
 }
 
-// AddFreeTextToShoppingList adds a free-text item to the shopping list.
+// AddFreeTextToShoppingList adds a free-text item (not linked to a product) to the list.
+// Useful for items like "bread" or "eggs" without specifying a specific product.
 func (c *Client) AddFreeTextToShoppingList(ctx context.Context, name string, quantity int) error {
 	if quantity <= 0 {
 		quantity = 1
@@ -112,7 +114,8 @@ func (c *Client) RemoveFromShoppingList(ctx context.Context, itemID string) erro
 	return nil
 }
 
-// CheckShoppingListItem marks an item as checked or unchecked.
+// CheckShoppingListItem marks an item as checked (picked) or unchecked.
+// Checked items are typically displayed differently in the app UI.
 func (c *Client) CheckShoppingListItem(ctx context.Context, itemID string, checked bool) error {
 	body := map[string]any{
 		"checked": checked,
@@ -142,7 +145,9 @@ func (c *Client) ClearShoppingList(ctx context.Context) error {
 	return nil
 }
 
-// ShoppingListToOrder adds all unchecked items from the shopping list to the order.
+// ShoppingListToOrder adds all unchecked product items from the shopping list to the order.
+// Free-text items (without ProductID) are skipped. This is useful for quickly
+// converting your shopping list into an order.
 func (c *Client) ShoppingListToOrder(ctx context.Context) error {
 	list, err := c.GetShoppingList(ctx)
 	if err != nil {

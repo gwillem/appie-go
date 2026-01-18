@@ -78,7 +78,12 @@ func (p *productResponse) toProduct() Product {
 	}
 }
 
-// SearchProducts searches for products by query string.
+// SearchProducts searches for products by query string and returns up to limit results.
+// If limit is 0 or negative, defaults to 30 products.
+//
+// Example:
+//
+//	products, err := client.SearchProducts(ctx, "melk", 10)
 func (c *Client) SearchProducts(ctx context.Context, query string, limit int) ([]Product, error) {
 	if limit <= 0 {
 		limit = 30
@@ -105,7 +110,8 @@ func (c *Client) SearchProducts(ctx context.Context, query string, limit int) ([
 	return products, nil
 }
 
-// GetProduct retrieves a single product by ID (webshopId).
+// GetProduct retrieves a single product by its webshopId.
+// Returns detailed product information including nutritional data and images.
 func (c *Client) GetProduct(ctx context.Context, productID int) (*Product, error) {
 	path := fmt.Sprintf("/mobile-services/product/detail/v4/fir/%d", productID)
 
@@ -122,7 +128,8 @@ func (c *Client) GetProduct(ctx context.Context, productID int) (*Product, error
 	return &product, nil
 }
 
-// GetProductsByIDs retrieves multiple products by their IDs.
+// GetProductsByIDs retrieves multiple products by their webshopIds in a single request.
+// Products are returned in the same order as the input IDs.
 func (c *Client) GetProductsByIDs(ctx context.Context, productIDs []int) ([]Product, error) {
 	if len(productIDs) == 0 {
 		return nil, nil
@@ -165,7 +172,9 @@ type bonusSectionResponse struct {
 	} `json:"bonusGroupOrProducts"`
 }
 
-// GetBonusProducts retrieves products currently on bonus.
+// GetBonusProducts retrieves products currently on bonus (promotion).
+// Filter by category (e.g., "Vlees", "Zuivel") or pass empty string for all.
+// If limit is 0 or negative, defaults to 30 products.
 func (c *Client) GetBonusProducts(ctx context.Context, category string, limit int) ([]Product, error) {
 	if limit <= 0 {
 		limit = 30
@@ -204,7 +213,8 @@ func (c *Client) GetBonusProducts(ctx context.Context, category string, limit in
 	return products, nil
 }
 
-// GetSpotlightBonusProducts retrieves featured bonus products.
+// GetSpotlightBonusProducts retrieves featured/highlighted bonus products.
+// These are typically the best or most promoted deals of the week.
 func (c *Client) GetSpotlightBonusProducts(ctx context.Context) ([]Product, error) {
 	params := url.Values{}
 	params.Set("application", "AHWEBSHOP")

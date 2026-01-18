@@ -71,7 +71,8 @@ func (r *orderSummaryResponse) toOrder() Order {
 	}
 }
 
-// GetOrder retrieves the current active order.
+// GetOrder retrieves the current active order (shopping cart).
+// The order ID is cached for use in subsequent order operations.
 func (c *Client) GetOrder(ctx context.Context) (*Order, error) {
 	var result orderSummaryResponse
 	if err := c.doRequest(ctx, http.MethodGet, "/mobile-services/order/v1/summaries/active?sortBy=DEFAULT", nil, &result); err != nil {
@@ -88,6 +89,13 @@ func (c *Client) GetOrder(ctx context.Context) (*Order, error) {
 }
 
 // AddToOrder adds or updates items in the current order.
+// If an item already exists, its quantity is updated. Set quantity to 0 to remove.
+//
+// Example:
+//
+//	err := client.AddToOrder(ctx, []appie.OrderItem{
+//	    {ProductID: 123456, Quantity: 2},
+//	})
 func (c *Client) AddToOrder(ctx context.Context, items []OrderItem) error {
 	type itemRequest struct {
 		ProductID     int    `json:"productId"`

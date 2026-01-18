@@ -18,7 +18,10 @@ const (
 	defaultClientVersion = "9.28"
 )
 
-// Client is the AH API client.
+// Client is the AH API client. It handles authentication, token management,
+// and provides methods to interact with products, orders, shopping lists, and more.
+//
+// Client is safe for concurrent use. Token state is protected by a mutex.
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
@@ -36,7 +39,7 @@ type Client struct {
 	configPath string
 }
 
-// Option configures the client.
+// Option configures the client. Use With* functions to create options.
 type Option func(*Client)
 
 // WithHTTPClient sets a custom HTTP client.

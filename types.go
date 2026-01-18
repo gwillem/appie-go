@@ -3,14 +3,20 @@ package appie
 import "time"
 
 // Token represents the authentication tokens returned by the API.
+// These tokens are used for API authorization and should be stored securely.
 type Token struct {
-	AccessToken  string `json:"access_token"`
+	// AccessToken is the bearer token used for API requests.
+	AccessToken string `json:"access_token"`
+	// RefreshToken is used to obtain a new access token when it expires.
 	RefreshToken string `json:"refresh_token"`
-	MemberID     string `json:"member_id,omitempty"`
-	ExpiresIn    int    `json:"expires_in"`
+	// MemberID is the authenticated user's member ID.
+	MemberID string `json:"member_id,omitempty"`
+	// ExpiresIn is the token lifetime in seconds (typically ~7 days).
+	ExpiresIn int `json:"expires_in"`
 }
 
 // Config holds the client configuration stored in .appie.json.
+// This is used for persisting authentication state across sessions.
 type Config struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -18,56 +24,84 @@ type Config struct {
 	ExpiresIn    int    `json:"expires_in,omitempty"`
 }
 
-// Product represents an AH product.
+// Product represents an AH product with pricing and availability information.
 type Product struct {
-	ID              int      `json:"id"`
-	WebshopID       string   `json:"webshopId,omitempty"`
-	Title           string   `json:"title"`
-	Brand           string   `json:"brand,omitempty"`
-	Category        string   `json:"category,omitempty"`
-	ShortDescription string  `json:"shortDescription,omitempty"`
-	Price           Price    `json:"price"`
-	Images          []Image  `json:"images,omitempty"`
-	NutriScore      string   `json:"nutriScore,omitempty"`
-	IsBonus         bool     `json:"isBonus"`
-	IsAvailable     bool     `json:"isAvailable"`
-	UnitSize        string   `json:"unitSize,omitempty"`
+	// ID is the webshop product ID used for ordering.
+	ID int `json:"id"`
+	// WebshopID is the string representation of the ID.
+	WebshopID string `json:"webshopId,omitempty"`
+	// Title is the product name.
+	Title string `json:"title"`
+	// Brand is the product brand (e.g., "AH Biologisch").
+	Brand string `json:"brand,omitempty"`
+	// Category is the main product category.
+	Category string `json:"category,omitempty"`
+	// ShortDescription is a brief product description.
+	ShortDescription string `json:"shortDescription,omitempty"`
+	// Price contains current and previous pricing.
+	Price Price `json:"price"`
+	// Images contains product images in various sizes.
+	Images []Image `json:"images,omitempty"`
+	// NutriScore is the nutritional score (A-E).
+	NutriScore string `json:"nutriScore,omitempty"`
+	// IsBonus indicates if the product is currently on promotion.
+	IsBonus bool `json:"isBonus"`
+	// IsAvailable indicates if the product can be ordered online.
+	IsAvailable bool `json:"isAvailable"`
+	// UnitSize is the package size (e.g., "500 g", "1 L").
+	UnitSize string `json:"unitSize,omitempty"`
+	// UnitPriceDescription describes price per unit (e.g., "per kg €5.99").
 	UnitPriceDescription string `json:"unitPriceDescription,omitempty"`
 }
 
-// Price represents product pricing.
+// Price represents product pricing in EUR.
 type Price struct {
-	Now      float64 `json:"now"`
-	Was      float64 `json:"was,omitempty"`
-	UnitSize string  `json:"unitSize,omitempty"`
+	// Now is the current price.
+	Now float64 `json:"now"`
+	// Was is the price before any discount (0 if no discount).
+	Was float64 `json:"was,omitempty"`
+	// UnitSize for price comparison purposes.
+	UnitSize string `json:"unitSize,omitempty"`
 }
 
-// Image represents a product image.
+// Image represents a product image. Images are available in multiple sizes
+// (typically 48, 80, 200, 400, 800 pixels).
 type Image struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width,omitempty"`
 	Height int    `json:"height,omitempty"`
 }
 
-// Order represents a shopping order.
+// Order represents a shopping order (cart). Orders in AH can have various states:
+// NEW, REOPENED, PROCESSING, DELIVERED, etc.
 type Order struct {
-	ID            string      `json:"id"`
-	Hash          string      `json:"hash,omitempty"`
-	State         string      `json:"state,omitempty"`
-	Items         []OrderItem `json:"items"`
-	TotalCount    int         `json:"totalCount"`
-	TotalPrice    float64     `json:"totalPrice"`
-	LastUpdated   time.Time   `json:"lastUpdated,omitempty"`
+	// ID is the numeric order ID.
+	ID string `json:"id"`
+	// Hash is used for order verification in API calls.
+	Hash string `json:"hash,omitempty"`
+	// State is the current order state (e.g., "NEW", "REOPENED").
+	State string `json:"state,omitempty"`
+	// Items contains all products in the order.
+	Items []OrderItem `json:"items"`
+	// TotalCount is the number of unique items.
+	TotalCount int `json:"totalCount"`
+	// TotalPrice is the total order value in EUR.
+	TotalPrice float64 `json:"totalPrice"`
+	// LastUpdated is when the order was last modified.
+	LastUpdated time.Time `json:"lastUpdated,omitempty"`
 }
 
-// OrderItem represents an item in an order.
+// OrderItem represents a product and quantity in an order.
 type OrderItem struct {
-	ProductID int     `json:"productId"`
-	Quantity  int     `json:"quantity"`
-	Product   *Product `json:"product,omitempty"`
+	// ProductID is the webshop product ID.
+	ProductID int `json:"productId"`
+	// Quantity is the number of items (0 to remove).
+	Quantity int `json:"quantity"`
+	// Product contains product details when retrieved with the order.
+	Product *Product `json:"product,omitempty"`
 }
 
-// OrderSummary represents the order summary/totals.
+// OrderSummary provides totals and discount information for an order.
 type OrderSummary struct {
 	TotalItems    int     `json:"totalItems"`
 	TotalPrice    float64 `json:"totalPrice"`
@@ -75,25 +109,36 @@ type OrderSummary struct {
 	DeliveryCost  float64 `json:"deliveryCost,omitempty"`
 }
 
-// ShoppingList represents a shopping list.
+// ShoppingList represents a user's shopping list. Users can have multiple lists.
 type ShoppingList struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name,omitempty"`
-	ItemCount int        `json:"itemCount,omitempty"`
-	Items     []ListItem `json:"items,omitempty"`
+	// ID is a UUID identifying the list.
+	ID string `json:"id"`
+	// Name is the user-defined list name.
+	Name string `json:"name,omitempty"`
+	// ItemCount is the number of items in the list.
+	ItemCount int `json:"itemCount,omitempty"`
+	// Items contains the list items (may not always be populated).
+	Items []ListItem `json:"items,omitempty"`
 }
 
-// ListItem represents an item in a shopping list.
+// ListItem represents an item in a shopping list. Items can be either
+// linked to a product (by ProductID) or free-text entries (by Name).
 type ListItem struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	ProductID int      `json:"productId,omitempty"`
-	Quantity  int      `json:"quantity"`
-	Checked   bool     `json:"checked"`
-	Product   *Product `json:"product,omitempty"`
+	// ID is the unique item identifier within the list.
+	ID string `json:"id"`
+	// Name is the item description (for free-text items).
+	Name string `json:"name"`
+	// ProductID links to a product (0 for free-text items).
+	ProductID int `json:"productId,omitempty"`
+	// Quantity is the desired amount.
+	Quantity int `json:"quantity"`
+	// Checked indicates if the item has been picked/crossed off.
+	Checked bool `json:"checked"`
+	// Product contains product details when available.
+	Product *Product `json:"product,omitempty"`
 }
 
-// Member represents a member profile.
+// Member represents basic member profile information.
 type Member struct {
 	ID        string `json:"id"`
 	FirstName string `json:"firstName"`
@@ -101,38 +146,41 @@ type Member struct {
 	Email     string `json:"email"`
 }
 
-// Address represents a physical address.
+// Address represents a Dutch postal address.
 type Address struct {
 	Street           string `json:"street"`
 	HouseNumber      int    `json:"houseNumber"`
-	HouseNumberExtra string `json:"houseNumberExtra,omitempty"`
-	PostalCode       string `json:"postalCode"`
+	HouseNumberExtra string `json:"houseNumberExtra,omitempty"` // e.g., "A", "2-hoog"
+	PostalCode       string `json:"postalCode"`                 // Dutch format: "1234AB"
 	City             string `json:"city"`
-	CountryCode      string `json:"countryCode,omitempty"`
+	CountryCode      string `json:"countryCode,omitempty"` // e.g., "NL"
 }
 
-// MemberFull represents the full member profile with all details.
+// MemberFull represents the complete member profile including address,
+// loyalty cards, and customer segmentation data.
 type MemberFull struct {
 	ID              string   `json:"id"`
 	FirstName       string   `json:"firstName"`
 	LastName        string   `json:"lastName"`
 	Email           string   `json:"email"`
-	Gender          string   `json:"gender,omitempty"`
-	DateOfBirth     string   `json:"dateOfBirth,omitempty"`
-	PhoneNumber     string   `json:"phoneNumber,omitempty"`
+	Gender          string   `json:"gender,omitempty"`      // "MALE", "FEMALE", or empty
+	DateOfBirth     string   `json:"dateOfBirth,omitempty"` // Format: "YYYY-MM-DD"
+	PhoneNumber     string   `json:"phoneNumber,omitempty"` // Dutch format with country code
 	Address         Address  `json:"address"`
-	BonusCardNumber string   `json:"bonusCardNumber,omitempty"`
-	GallCardNumber  string   `json:"gallCardNumber,omitempty"`
-	Audiences       []string `json:"audiences,omitempty"`
+	BonusCardNumber string   `json:"bonusCardNumber,omitempty"` // 13-digit card number
+	GallCardNumber  string   `json:"gallCardNumber,omitempty"`  // Gall & Gall card
+	Audiences       []string `json:"audiences,omitempty"`       // Customer segments
 }
 
-// BonusCard represents the bonus card info.
+// BonusCard represents the AH Bonuskaart (loyalty card) information.
 type BonusCard struct {
+	// CardNumber is the 13-digit bonus card number.
 	CardNumber string `json:"cardNumber"`
-	IsActive   bool   `json:"isActive"`
+	// IsActive indicates if a bonus card is linked to the account.
+	IsActive bool `json:"isActive"`
 }
 
-// SearchResult represents the result of a product search.
+// SearchResult represents the result of a product search with pagination.
 type SearchResult struct {
 	Products   []Product `json:"products"`
 	TotalCount int       `json:"totalCount"`

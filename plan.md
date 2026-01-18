@@ -205,10 +205,11 @@ func main() {
 - [x] Get shopping lists
 - [ ] Add/remove items (endpoint needs verification)
 
-### Phase 5: Member ⚠️
+### Phase 5: Member ✅
 
-- [ ] Get member (uses GraphQL - needs discovery)
-- [ ] Get bonus card (endpoint needs verification)
+- [x] Get member (GraphQL FetchMember)
+- [x] Get member full profile
+- [x] Get bonus card
 
 ### Phase 6: Polish
 
@@ -231,7 +232,7 @@ func main() {
 | `products.go` | Product search and details | ✅ |
 | `order.go` | Order management | ✅ |
 | `shoppinglist.go` | Shopping list | ✅ |
-| `member.go` | Member profile (partial) | ⚠️ |
+| `member.go` | Member profile (GraphQL) | ✅ |
 | `appie_test.go` | Integration tests | ✅ |
 | `cmd/login/main.go` | CLI login tool | ✅ |
 | `doc/albertheijn_api.md` | API documentation | ✅ |
@@ -252,17 +253,18 @@ func main() {
 | `GetBonusProducts()` | ✅ | Returns 0 products when category has no bonus |
 | `GetOrder()` | ✅ | |
 | `GetShoppingLists()` | ✅ | API requires productId param (pass 0 for default) |
-| `GetMember()` | ⏸️ | Uses GraphQL - needs schema |
-| `GetBonusCard()` | ⏸️ | Endpoint needs verification |
+| `GetMember()` | ✅ | Uses GraphQL FetchMember |
+| `GetMemberFull()` | ✅ | Full profile with address, cards, audiences |
+| `GetBonusCard()` | ✅ | Returns bonus card number from member profile |
 
 ---
 
 ## Next Steps
 
-1. **Member GraphQL**: The member profile uses a GraphQL query called `FetchMember`. Need to capture the exact query structure.
+1. **Shopping List Mutations**: Discover endpoints for adding/removing items from lists.
 
-2. **Shopping List Mutations**: Discover endpoints for adding/removing items from lists.
+2. **Add More Tests**: Add tests for AddToOrder, RemoveFromOrder, etc.
 
-3. **Add More Tests**: Add tests for AddToOrder, RemoveFromOrder, etc.
+3. **Examples**: Create example scripts for common use cases.
 
-4. **Examples**: Create example scripts for common use cases.
+4. **Documentation**: Add godoc comments and README.

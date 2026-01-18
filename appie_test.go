@@ -207,7 +207,6 @@ func TestGetShoppingList(t *testing.T) {
 }
 
 func TestGetMember(t *testing.T) {
-	t.Skip("Uses GraphQL FetchMember - needs discovery")
 	client := testClient(t)
 	ctx := context.Background()
 
@@ -220,7 +219,6 @@ func TestGetMember(t *testing.T) {
 }
 
 func TestGetBonusCard(t *testing.T) {
-	t.Skip("Endpoint path needs discovery")
 	client := testClient(t)
 	ctx := context.Background()
 

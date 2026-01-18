@@ -101,6 +101,31 @@ type Member struct {
 	Email     string `json:"email"`
 }
 
+// Address represents a physical address.
+type Address struct {
+	Street           string `json:"street"`
+	HouseNumber      int    `json:"houseNumber"`
+	HouseNumberExtra string `json:"houseNumberExtra,omitempty"`
+	PostalCode       string `json:"postalCode"`
+	City             string `json:"city"`
+	CountryCode      string `json:"countryCode,omitempty"`
+}
+
+// MemberFull represents the full member profile with all details.
+type MemberFull struct {
+	ID              string   `json:"id"`
+	FirstName       string   `json:"firstName"`
+	LastName        string   `json:"lastName"`
+	Email           string   `json:"email"`
+	Gender          string   `json:"gender,omitempty"`
+	DateOfBirth     string   `json:"dateOfBirth,omitempty"`
+	PhoneNumber     string   `json:"phoneNumber,omitempty"`
+	Address         Address  `json:"address"`
+	BonusCardNumber string   `json:"bonusCardNumber,omitempty"`
+	GallCardNumber  string   `json:"gallCardNumber,omitempty"`
+	Audiences       []string `json:"audiences,omitempty"`
+}
+
 // BonusCard represents the bonus card info.
 type BonusCard struct {
 	CardNumber string `json:"cardNumber"`

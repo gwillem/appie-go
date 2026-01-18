@@ -2,6 +2,39 @@
 
 Base URL: `https://api.ah.nl`
 
+## Implementation Status
+
+| Category | Endpoint | Status |
+|----------|----------|--------|
+| **Auth** | Anonymous token | ✅ |
+| | Exchange code | ✅ |
+| | Refresh token | ✅ |
+| | Logout | |
+| | Federate code | |
+| **Products** | Search | ✅ |
+| | Get by ID | ✅ |
+| | Get by IDs | ✅ |
+| | Categories | |
+| **Bonus** | By category | ✅ |
+| | Spotlight | ✅ |
+| | Previously bought | |
+| | Metadata | |
+| **Orders** | Get active | ✅ |
+| | Add/update items | ✅ |
+| | Checkout | |
+| | Details by taxonomy | |
+| **Shopping Lists** | Get lists (v3) | ✅ |
+| | Get items (v2) | |
+| **Member** | FetchMember (GraphQL) | ✅ |
+| **Stores** | FetchStore | |
+| | GetFavoriteStore | |
+| **Recommendations** | Crosssells | |
+| | Don't forget | |
+| **Config** | Feature flags | ✅ |
+| | Version check | |
+
+---
+
 ## Required Headers
 
 All requests require these headers:
@@ -79,6 +112,20 @@ POST /mobile-auth/v1/auth/token/refresh
 
 ```
 POST /mobile-auth/v1/auth/federate/code
+```
+
+### Logout
+
+```
+POST /mobile-auth/v1/auth/token/logout
+```
+
+**Request:**
+```json
+{
+  "clientId": "appie-ios",
+  "refreshToken": "<refresh_token>"
+}
 ```
 
 ---
@@ -275,12 +322,13 @@ GET /mobile-services/order/v1/<orderId>/checkout
 
 ## Shopping Lists
 
-### Get All Lists
+### Get All Lists (v3)
 
 ```
-GET /mobile-services/lists/v3/lists
 GET /mobile-services/lists/v3/lists?productId=<id>
 ```
+
+Note: The `productId` parameter is required but returns all lists regardless of value.
 
 **Response:**
 ```json
@@ -290,9 +338,17 @@ GET /mobile-services/lists/v3/lists?productId=<id>
     "description": "My List",
     "itemCount": 4,
     "hasFavoriteProduct": false,
-    "productImages": [[...]]
+    "productImages": [
+      [{"width": 80, "height": 80, "url": "https://static.ah.nl/..."}]
+    ]
   }
 ]
+```
+
+### Get List Items (v2)
+
+```
+GET /mobile-services/shoppinglist/v2/items
 ```
 
 ---
@@ -371,7 +427,103 @@ POST /graphql
 
 All GraphQL requests use the same endpoint with different queries.
 
-### Known Queries
+**Required Headers for GraphQL:**
+```
+x-apollo-operation-name: <OperationName>
+x-apollo-operation-type: query
+apollographql-client-name: nl.ah.Appie-apollo-ios
+apollographql-client-version: 9.28-260102201630
+```
+
+### Known Operations
+
+| Operation | Description | Status |
+|-----------|-------------|--------|
+| FetchMember | Get member profile, address, cards | ✅ Implemented |
+| FetchEntryPoints | Home screen entry points | |
+| FetchCuratedLists | Curated shopping lists | |
+| FetchNBACard | Next best action card | |
+| FetchPageEntries | Page entries | |
+| FetchPageTemplate | Page templates | |
+| FetchPurchaseStampServerTime | Purchase stamp time | |
+| FetchSmartLane | Smart suggestions lane | |
+| FetchStore | Store details | |
+| GetFavoriteStore | User's favorite store | |
+| MessageCenterGetUnreadMessagesInfo | Unread messages count | |
+
+#### FetchMember
+
+Fetches member profile with address, cards, and customer segments.
+
+```graphql
+query FetchMember {
+  member {
+    __typename
+    ...MemberFragment
+  }
+}
+fragment MemberAddressFragment on MemberAddress {
+  __typename
+  street
+  houseNumber
+  houseNumberExtra
+  postalCode
+  city
+  countryCode
+}
+fragment MemberFragment on Member {
+  __typename
+  address { __typename ...MemberAddressFragment }
+  analytics { __typename digimon idmon idsas batch firebase sitespect }
+  cards { __typename airmiles bonus gall }
+  company { __typename id name addressInvoice { __typename ...MemberAddressFragment } customOffersAllowed }
+  contactSubscriptions
+  dateOfBirth
+  emailAddress
+  gender
+  id
+  isB2B
+  memberships
+  name { __typename first last }
+  phoneNumber
+  customerProfileAudiences
+  customerProfileProperties { __typename key value }
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "member": {
+      "id": 27993385,
+      "emailAddress": "user@example.com",
+      "gender": "MALE",
+      "dateOfBirth": "1985-03-15",
+      "phoneNumber": "+31612345678",
+      "isB2B": false,
+      "name": {
+        "first": "Jan",
+        "last": "de Vries"
+      },
+      "address": {
+        "street": "Hoofdstraat",
+        "houseNumber": 42,
+        "houseNumberExtra": "A",
+        "postalCode": "1234AB",
+        "city": "AMSTERDAM",
+        "countryCode": "NL"
+      },
+      "cards": {
+        "bonus": "2620123456789",
+        "gall": null,
+        "airmiles": null
+      },
+      "customerProfileAudiences": ["segment1", "segment2"]
+    }
+  }
+}
+```
 
 #### FetchEntryPoints
 
@@ -391,9 +543,35 @@ query FetchEntryPoints($name: String!, $version: String) {
 }
 ```
 
-#### FetchMember (from blog analysis)
+**Variables:**
+```json
+{
+  "name": "my-ah-lane-nl",
+  "version": "9.28"
+}
+```
 
-Fetches member profile with detailed customer segments.
+#### GetFavoriteStore
+
+```graphql
+query GetFavoriteStore {
+  storesFavouriteStore {
+    __typename
+    ...StoreFragment
+  }
+}
+```
+
+#### FetchStore
+
+```graphql
+query FetchStore($storeId: Int!) {
+  store(storeId: $storeId) {
+    __typename
+    ...StoreFragment
+  }
+}
+```
 
 ---
 

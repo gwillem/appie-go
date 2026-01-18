@@ -229,3 +229,21 @@ func TestGetBonusCard(t *testing.T) {
 
 	t.Logf("Bonus card: %s (active: %v)", card.CardNumber, card.IsActive)
 }
+
+func TestGetFeatureFlags(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+
+	flags, err := client.GetFeatureFlags(ctx)
+	if err != nil {
+		t.Fatalf("failed to get feature flags: %v", err)
+	}
+
+	t.Logf("Feature flags: %d total", len(flags))
+
+	// Check some known flags
+	knownFlags := []string{"dark-mode", "ah-premium", "my-list", "push-notifications", "nutriscore"}
+	for _, flag := range knownFlags {
+		t.Logf("  %s: %d%% (enabled: %v)", flag, flags.Rollout(flag), flags.IsEnabled(flag))
+	}
+}

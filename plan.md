@@ -2,56 +2,7 @@
 
 Go library for interacting with Albert Heijn's mobile API.
 
-## API Endpoints
-
-### Authentication
-
-| Method | Endpoint                                                                                   | Description                             |
-| ------ | ------------------------------------------------------------------------------------------ | --------------------------------------- |
-| POST   | `api.ah.nl/mobile-auth/v1/auth/token/anonymous`                                            | Get anonymous token (no login required) |
-| POST   | `api.ah.nl/mobile-auth/v1/auth/token`                                                      | Exchange auth code for tokens           |
-| POST   | `api.ah.nl/mobile-auth/v1/auth/token/refresh`                                              | Refresh access token                    |
-| GET    | `login.ah.nl/login?client_id=appie-ios&response_type=code&redirect_uri=appie://login-exit` | OAuth login page (requires captcha)     |
-
-### Products
-
-| Method | Endpoint                                           | Description                   |
-| ------ | -------------------------------------------------- | ----------------------------- |
-| GET    | `/mobile-services/product/search/v2`               | Search products               |
-| GET    | `/mobile-services/product/detail/v4/fir/{id}`      | Get product details           |
-| GET    | `/mobile-services/product/search/v2/products`      | Get products by IDs           |
-| GET    | `/mobile-services/bonuspage/v2/section`            | Get bonus products by category|
-| GET    | `/mobile-services/bonuspage/v2/section/spotlight`  | Get featured bonus products   |
-
-### Order Management
-
-| Method | Endpoint                                               | Description               |
-| ------ | ------------------------------------------------------ | ------------------------- |
-| GET    | `/mobile-services/order/v1/summaries/active`           | Get active order          |
-| PUT    | `/mobile-services/order/v1/items`                      | Add/update items in order |
-
-### Shopping List
-
-| Method | Endpoint                                | Description                    |
-| ------ | --------------------------------------- | ------------------------------ |
-| GET    | `/mobile-services/lists/v3/lists`       | Get lists (requires productId) |
-
----
-
-## Required Headers
-
-```go
-User-Agent:        Appie/9.28 (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)
-x-clientname:      ipad
-x-clientversion:   9.28
-x-application:     AHWEBSHOP
-x-accept-language: nl-NL
-x-fraud-detection-installation-id: <uuid>
-x-correlation-id:  <uuid>
-Accept:            application/json
-Content-Type:      application/json
-Authorization:     Bearer <access_token>  // when authenticated
-```
+See [doc/albertheijn_api.md](doc/albertheijn_api.md) for full API documentation.
 
 ---
 
@@ -119,7 +70,14 @@ func (c *Client) ShoppingListToOrder(ctx context.Context) error
 
 // member.go
 func (c *Client) GetMember(ctx context.Context) (*Member, error)
+func (c *Client) GetMemberFull(ctx context.Context) (*MemberFull, error)
 func (c *Client) GetBonusCard(ctx context.Context) (*BonusCard, error)
+
+// config.go
+func (c *Client) GetFeatureFlags(ctx context.Context) (FeatureFlags, error)
+func (c *Client) GetFeatureFlagsForVersion(ctx context.Context, version string) (FeatureFlags, error)
+func (f FeatureFlags) IsEnabled(flag string) bool
+func (f FeatureFlags) Rollout(flag string) int
 ```
 
 ---
@@ -234,7 +192,9 @@ func main() {
 | `shoppinglist.go` | Shopping list | ✅ |
 | `member.go` | Member profile (GraphQL) | ✅ |
 | `appie_test.go` | Integration tests | ✅ |
+| `config.go` | Feature flags | ✅ |
 | `cmd/login/main.go` | CLI login tool | ✅ |
+| `cmd/dump_feature_flags/main.go` | CLI feature flags dump | ✅ |
 | `doc/albertheijn_api.md` | API documentation | ✅ |
 
 ---
@@ -256,15 +216,24 @@ func main() {
 | `GetMember()` | ✅ | Uses GraphQL FetchMember |
 | `GetMemberFull()` | ✅ | Full profile with address, cards, audiences |
 | `GetBonusCard()` | ✅ | Returns bonus card number from member profile |
+| `GetFeatureFlags()` | ✅ | Returns 268 feature flags with rollout percentages |
 
 ---
 
 ## Next Steps
 
-1. **Shopping List Mutations**: Discover endpoints for adding/removing items from lists.
+1. **Logout**: Implement `/mobile-auth/v1/auth/token/logout`.
 
-2. **Add More Tests**: Add tests for AddToOrder, RemoveFromOrder, etc.
+2. **Store Operations**: Implement FetchStore and GetFavoriteStore GraphQL queries.
 
-3. **Examples**: Create example scripts for common use cases.
+3. **Checkout Flow**: Implement order checkout and delivery slot selection.
 
-4. **Documentation**: Add godoc comments and README.
+4. **Recommendations**: Implement previously bought and recommendation endpoints.
+
+5. **Add More Tests**: Add tests for AddToOrder, RemoveFromOrder, etc.
+
+6. **Examples**: Create example scripts for common use cases.
+
+7. **Documentation**: Add godoc comments and README.
+
+See [doc/albertheijn_api.md](doc/albertheijn_api.md) for full implementation status.

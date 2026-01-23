@@ -36,6 +36,8 @@ type Product struct {
 	Brand string `json:"brand,omitempty"`
 	// Category is the main product category.
 	Category string `json:"category,omitempty"`
+	// SubCategory is the secondary product category.
+	SubCategory string `json:"subCategory,omitempty"`
 	// ShortDescription is a brief product description.
 	ShortDescription string `json:"shortDescription,omitempty"`
 	// Price contains current and previous pricing.
@@ -46,12 +48,20 @@ type Product struct {
 	NutriScore string `json:"nutriScore,omitempty"`
 	// IsBonus indicates if the product is currently on promotion.
 	IsBonus bool `json:"isBonus"`
+	// BonusMechanism describes the type of bonus (e.g., "25% korting").
+	BonusMechanism string `json:"bonusMechanism,omitempty"`
 	// IsAvailable indicates if the product can be ordered online.
 	IsAvailable bool `json:"isAvailable"`
+	// IsOrderable indicates if the product can currently be ordered.
+	IsOrderable bool `json:"isOrderable"`
+	// IsPreviouslyBought indicates if the user has bought this before.
+	IsPreviouslyBought bool `json:"isPreviouslyBought"`
 	// UnitSize is the package size (e.g., "500 g", "1 L").
 	UnitSize string `json:"unitSize,omitempty"`
 	// UnitPriceDescription describes price per unit (e.g., "per kg €5.99").
 	UnitPriceDescription string `json:"unitPriceDescription,omitempty"`
+	// PropertyIcons contains icons like "vegan", "bio", etc.
+	PropertyIcons []string `json:"propertyIcons,omitempty"`
 }
 
 // Price represents product pricing in EUR.
@@ -186,6 +196,49 @@ type SearchResult struct {
 	TotalCount int       `json:"totalCount"`
 	Page       int       `json:"page"`
 	PageSize   int       `json:"pageSize"`
+}
+
+// Fulfillment represents a scheduled order with delivery information.
+// A fulfillment is an order that has been submitted for delivery.
+type Fulfillment struct {
+	// OrderID is the numeric order identifier.
+	OrderID int `json:"orderId"`
+	// Status is the delivery status (e.g., "REOPENED", "SUBMITTED").
+	Status string `json:"status"`
+	// StatusDescription is a human-readable status.
+	StatusDescription string `json:"statusDescription"`
+	// ShoppingType is the order type (e.g., "DELIVERY", "PICKUP").
+	ShoppingType string `json:"shoppingType"`
+	// TotalPrice is the order total in EUR.
+	TotalPrice float64 `json:"totalPrice"`
+	// Delivery contains delivery slot and address information.
+	Delivery FulfillmentDelivery `json:"delivery"`
+}
+
+// FulfillmentDelivery contains delivery details for a fulfillment.
+type FulfillmentDelivery struct {
+	// Status is the delivery status.
+	Status string `json:"status"`
+	// Method is the delivery method.
+	Method string `json:"method"`
+	// Slot contains the delivery time window.
+	Slot DeliverySlot `json:"slot"`
+	// Address is the delivery address.
+	Address Address `json:"address"`
+}
+
+// DeliverySlot represents a delivery time window.
+type DeliverySlot struct {
+	// Date is the delivery date (YYYY-MM-DD).
+	Date string `json:"date"`
+	// DateDisplay is the formatted date (e.g., "dinsdag 20 januari").
+	DateDisplay string `json:"dateDisplay"`
+	// TimeDisplay is the formatted time window (e.g., "18:00 - 20:00").
+	TimeDisplay string `json:"timeDisplay"`
+	// StartTime is the slot start time (HH:MM).
+	StartTime string `json:"startTime"`
+	// EndTime is the slot end time (HH:MM).
+	EndTime string `json:"endTime"`
 }
 
 // GraphQL request/response types

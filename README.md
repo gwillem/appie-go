@@ -120,7 +120,7 @@ The repository includes several CLI tools in `cmd/`:
 go run ./cmd/login
 
 # Dump feature flags
-go run ./cmd/dump_feature_flags
+go run ./cmd/dump-feature-flags
 
 # Dump member profile data
 go run ./cmd/dump-member

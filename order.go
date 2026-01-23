@@ -166,3 +166,111 @@ func (c *Client) GetOrderSummary(ctx context.Context) (*OrderSummary, error) {
 		TotalDiscount: result.TotalPrice.PriceDiscount,
 	}, nil
 }
+
+const fulfillmentsQuery = `query OrderFulfillments {
+  orderFulfillments(status: OPEN) {
+    result {
+      orderId
+      statusDescription
+      shoppingType
+      totalPrice {
+        totalPrice { amount }
+      }
+      delivery {
+        status
+        method
+        slot {
+          date
+          dateDisplay
+          timeDisplay
+          startTime
+          endTime
+        }
+        address {
+          street
+          houseNumber
+          houseNumberExtra
+          city
+          postalCode
+        }
+      }
+    }
+  }
+}`
+
+type fulfillmentsResponse struct {
+	OrderFulfillments struct {
+		Result []fulfillmentResult `json:"result"`
+	} `json:"orderFulfillments"`
+}
+
+type fulfillmentResult struct {
+	OrderID           int    `json:"orderId"`
+	StatusDescription string `json:"statusDescription"`
+	ShoppingType      string `json:"shoppingType"`
+	TotalPrice        struct {
+		TotalPrice struct {
+			Amount float64 `json:"amount"`
+		} `json:"totalPrice"`
+	} `json:"totalPrice"`
+	Delivery struct {
+		Status string `json:"status"`
+		Method string `json:"method"`
+		Slot   struct {
+			Date        string `json:"date"`
+			DateDisplay string `json:"dateDisplay"`
+			TimeDisplay string `json:"timeDisplay"`
+			StartTime   string `json:"startTime"`
+			EndTime     string `json:"endTime"`
+		} `json:"slot"`
+		Address struct {
+			Street           string `json:"street"`
+			HouseNumber      int    `json:"houseNumber"`
+			HouseNumberExtra string `json:"houseNumberExtra"`
+			City             string `json:"city"`
+			PostalCode       string `json:"postalCode"`
+		} `json:"address"`
+	} `json:"delivery"`
+}
+
+// GetFulfillments retrieves all open (scheduled) order fulfillments.
+// These are orders that have been submitted and are awaiting delivery.
+func (c *Client) GetFulfillments(ctx context.Context) ([]Fulfillment, error) {
+	var resp fulfillmentsResponse
+	if err := c.doGraphQL(ctx, fulfillmentsQuery, nil, &resp); err != nil {
+		return nil, fmt.Errorf("get fulfillments failed: %w", err)
+	}
+
+	results := resp.OrderFulfillments.Result
+	fulfillments := make([]Fulfillment, 0, len(results))
+
+	for _, r := range results {
+		fulfillments = append(fulfillments, Fulfillment{
+			OrderID:           r.OrderID,
+			Status:            r.Delivery.Status,
+			StatusDescription: r.StatusDescription,
+			ShoppingType:      r.ShoppingType,
+			TotalPrice:        r.TotalPrice.TotalPrice.Amount,
+			Delivery: FulfillmentDelivery{
+				Status: r.Delivery.Status,
+				Method: r.Delivery.Method,
+				Slot: DeliverySlot{
+					Date:        r.Delivery.Slot.Date,
+					DateDisplay: r.Delivery.Slot.DateDisplay,
+					TimeDisplay: r.Delivery.Slot.TimeDisplay,
+					StartTime:   r.Delivery.Slot.StartTime,
+					EndTime:     r.Delivery.Slot.EndTime,
+				},
+				Address: Address{
+					Street:           r.Delivery.Address.Street,
+					HouseNumber:      r.Delivery.Address.HouseNumber,
+					HouseNumberExtra: r.Delivery.Address.HouseNumberExtra,
+					City:             r.Delivery.Address.City,
+					PostalCode:       r.Delivery.Address.PostalCode,
+				},
+			},
+		})
+	}
+
+	return fulfillments, nil
+}

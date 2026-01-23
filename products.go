@@ -68,13 +68,18 @@ func (p *productResponse) toProduct() Product {
 		Title:                p.Title,
 		Brand:                p.Brand,
 		Category:             p.MainCategory,
+		SubCategory:          p.SubCategory,
 		Price:                Price{Now: price, Was: p.PriceBeforeBonus},
 		Images:               images,
 		NutriScore:           p.NutriScore,
 		IsBonus:              p.IsBonus,
+		BonusMechanism:       p.BonusMechanism,
 		IsAvailable:          p.AvailableOnline,
+		IsOrderable:          p.IsOrderable,
+		IsPreviouslyBought:   p.IsPreviouslyBought,
 		UnitSize:             p.SalesUnitSize,
 		UnitPriceDescription: p.UnitPriceDescription,
+		PropertyIcons:        p.PropertyIcons,
 	}
 }
 

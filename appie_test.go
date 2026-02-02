@@ -2,8 +2,12 @@ package appie
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 )
 
 func testClient(t *testing.T) *Client {
@@ -75,6 +79,138 @@ func TestLoginURL(t *testing.T) {
 	expected := "https://login.ah.nl/login?client_id=appie-ios&response_type=code&redirect_uri=appie://login-exit"
 	if url != expected {
 		t.Errorf("expected %s, got %s", expected, url)
+	}
+}
+
+func TestConfigExpiresAtRoundTrip(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "appie-test-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	client := New(WithConfigPath(tmpFile.Name()), WithTokens("access", "refresh"))
+	client.mu.Lock()
+	client.expiresAt = time.Now().Add(24 * time.Hour).Truncate(time.Second)
+	client.mu.Unlock()
+
+	if err := client.SaveConfig(); err != nil {
+		t.Fatal(err)
+	}
+
+	client2 := New(WithConfigPath(tmpFile.Name()))
+	if err := client2.LoadConfig(); err != nil {
+		t.Fatal(err)
+	}
+
+	client.mu.RLock()
+	expected := client.expiresAt
+	client.mu.RUnlock()
+
+	client2.mu.RLock()
+	got := client2.expiresAt
+	client2.mu.RUnlock()
+
+	if !expected.Equal(got) {
+		t.Errorf("expiresAt mismatch: expected %v, got %v", expected, got)
+	}
+}
+
+func TestAutoRefreshOnExpiredToken(t *testing.T) {
+	refreshCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/mobile-auth/v1/auth/token/refresh":
+			refreshCalled = true
+			json.NewEncoder(w).Encode(Token{
+				AccessToken:  "new-access",
+				RefreshToken: "new-refresh",
+				ExpiresIn:    86400,
+			})
+		case "/test-endpoint":
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("expired-access", "my-refresh"))
+	client.mu.Lock()
+	client.expiresAt = time.Now().Add(-1 * time.Hour) // expired
+	client.mu.Unlock()
+
+	ctx := context.Background()
+	var result map[string]string
+	if err := client.doRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	if !refreshCalled {
+		t.Error("expected refresh to be called for expired token")
+	}
+	if client.AccessToken() != "new-access" {
+		t.Errorf("expected access token 'new-access', got '%s'", client.AccessToken())
+	}
+}
+
+func TestNoAutoRefreshForAuthEndpoints(t *testing.T) {
+	refreshCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/mobile-auth/v1/auth/token/refresh" {
+			refreshCount++
+			json.NewEncoder(w).Encode(Token{
+				AccessToken:  "new-access",
+				RefreshToken: "new-refresh",
+				ExpiresIn:    86400,
+			})
+		}
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("expired-access", "my-refresh"))
+	client.mu.Lock()
+	client.expiresAt = time.Now().Add(-1 * time.Hour)
+	client.mu.Unlock()
+
+	ctx := context.Background()
+	// Calling RefreshToken directly should not trigger auto-refresh recursion
+	if err := client.RefreshToken(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if refreshCount != 1 {
+		t.Errorf("expected refresh to be called exactly once, got %d", refreshCount)
+	}
+	if client.AccessToken() != "new-access" {
+		t.Errorf("expected 'new-access', got '%s'", client.AccessToken())
+	}
+}
+
+func TestNoAutoRefreshWhenNotExpired(t *testing.T) {
+	refreshCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/mobile-auth/v1/auth/token/refresh" {
+			refreshCalled = true
+		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("valid-access", "my-refresh"))
+	client.mu.Lock()
+	client.expiresAt = time.Now().Add(24 * time.Hour) // not expired
+	client.mu.Unlock()
+
+	ctx := context.Background()
+	var result map[string]string
+	if err := client.doRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	if refreshCalled {
+		t.Error("refresh should not be called when token is not expired")
 	}
 }
 

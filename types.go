@@ -18,10 +18,10 @@ type Token struct {
 // Config holds the client configuration stored in .appie.json.
 // This is used for persisting authentication state across sessions.
 type Config struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	MemberID     string `json:"member_id,omitempty"`
-	ExpiresIn    int    `json:"expires_in,omitempty"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	MemberID     string    `json:"member_id,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
 // Product represents an AH product with pricing and availability information.

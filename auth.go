@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 )
 
 const (
@@ -33,6 +34,9 @@ func (c *Client) ExchangeCode(ctx context.Context, code string) error {
 	c.accessToken = token.AccessToken
 	c.refreshToken = token.RefreshToken
 	c.memberID = token.MemberID
+	if token.ExpiresIn > 0 {
+		c.expiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	}
 	c.mu.Unlock()
 
 	return nil
@@ -61,6 +65,9 @@ func (c *Client) RefreshToken(ctx context.Context) error {
 	c.mu.Lock()
 	c.accessToken = token.AccessToken
 	c.refreshToken = token.RefreshToken
+	if token.ExpiresIn > 0 {
+		c.expiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	}
 	c.mu.Unlock()
 
 	return nil

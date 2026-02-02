@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 const (
@@ -33,6 +34,7 @@ type Client struct {
 	accessToken  string
 	refreshToken string
 	memberID     string
+	expiresAt    time.Time
 	orderID      string
 	orderHash    string
 
@@ -122,6 +124,7 @@ func (c *Client) LoadConfig() error {
 	c.accessToken = cfg.AccessToken
 	c.refreshToken = cfg.RefreshToken
 	c.memberID = cfg.MemberID
+	c.expiresAt = cfg.ExpiresAt
 	c.mu.Unlock()
 
 	return nil
@@ -138,6 +141,7 @@ func (c *Client) SaveConfig() error {
 		AccessToken:  c.accessToken,
 		RefreshToken: c.refreshToken,
 		MemberID:     c.memberID,
+		ExpiresAt:    c.expiresAt,
 	}
 	c.mu.RUnlock()
 
@@ -195,8 +199,32 @@ func (c *Client) setHeaders(req *http.Request) {
 	c.mu.RUnlock()
 }
 
+// ensureFreshToken refreshes the access token if it has expired and a refresh token is available.
+// Auth endpoints are excluded to avoid infinite loops.
+func (c *Client) ensureFreshToken(ctx context.Context, path string) {
+	// Don't auto-refresh for auth endpoints
+	if len(path) >= len("/mobile-auth/") && path[:len("/mobile-auth/")] == "/mobile-auth/" {
+		return
+	}
+
+	c.mu.RLock()
+	expired := !c.expiresAt.IsZero() && time.Now().After(c.expiresAt)
+	hasRefresh := c.refreshToken != ""
+	c.mu.RUnlock()
+
+	if expired && hasRefresh {
+		// Best-effort refresh; if it fails, the original request will proceed
+		// with the expired token and the API will return an appropriate error.
+		if err := c.RefreshToken(ctx); err == nil {
+			_ = c.SaveConfig()
+		}
+	}
+}
+
 // doRequest performs an HTTP request and decodes the response.
 func (c *Client) doRequest(ctx context.Context, method, path string, body, result any) error {
+	c.ensureFreshToken(ctx, path)
+
 	var bodyReader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)

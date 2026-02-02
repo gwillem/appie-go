@@ -13,5 +13,8 @@ dump2.har
 # Blog draft with personal info
 blog-draft.md
 
+# Dev/test tools
+cmd/dev/
+
 # Claude settings
 .claude/

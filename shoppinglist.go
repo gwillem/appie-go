@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
-// listResponse matches the API response for shopping lists.
+// listResponse matches the API response for favorite lists (v3).
 type listResponse struct {
 	ID                 string `json:"id"`
 	Description        string `json:"description"`
@@ -19,7 +20,18 @@ type listResponse struct {
 	} `json:"productImages"`
 }
 
-// GetShoppingLists retrieves all shopping lists for the authenticated user.
+// shoppingListItem is the v2 request body format for adding items.
+type shoppingListItem struct {
+	Description   string `json:"description"`
+	ProductID     int    `json:"productId,omitempty"`
+	Quantity      int    `json:"quantity"`
+	Type          string `json:"type"`
+	OriginCode    string `json:"originCode"`
+	SearchTerm    string `json:"searchTerm,omitempty"`
+	StrikeThrough bool   `json:"strikeThrough"`
+}
+
+// GetShoppingLists retrieves all favorite lists (v3) for the authenticated user.
 // The API quirk requires a productId parameter, but returns all lists regardless.
 // Pass 0 to use a default product ID (recommended).
 func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]ShoppingList, error) {
@@ -45,7 +57,7 @@ func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]Shoppin
 	return lists, nil
 }
 
-// GetShoppingList retrieves the first (default) shopping list.
+// GetShoppingList retrieves the first (default) favorite list.
 // Use GetShoppingLists if you need to access multiple lists.
 func (c *Client) GetShoppingList(ctx context.Context) (*ShoppingList, error) {
 	lists, err := c.GetShoppingLists(ctx, 0)
@@ -60,48 +72,93 @@ func (c *Client) GetShoppingList(ctx context.Context) (*ShoppingList, error) {
 	return &lists[0], nil
 }
 
-// AddToShoppingList adds items to the default shopping list.
-// Items can be products (with ProductID) or free-text entries (with Name).
+// AddToShoppingList adds products to the main shopping list (v2).
+// This uses PATCH /shoppinglist/v2/items.
 func (c *Client) AddToShoppingList(ctx context.Context, items []ListItem) error {
-	body := map[string]any{
-		"items": items,
+	v2Items := make([]shoppingListItem, 0, len(items))
+	for _, item := range items {
+		v2 := shoppingListItem{
+			Quantity:      max(item.Quantity, 1),
+			StrikeThrough: false,
+		}
+		if item.ProductID > 0 {
+			v2.ProductID = item.ProductID
+			v2.Type = "SHOPPABLE"
+			v2.OriginCode = "PRD"
+			v2.Description = item.Name
+			v2.SearchTerm = item.Name
+		} else {
+			v2.Type = "SHOPPABLE"
+			v2.OriginCode = "PRD"
+			v2.Description = item.Name
+		}
+		v2Items = append(v2Items, v2)
 	}
 
-	if err := c.doRequest(ctx, http.MethodPost, "/mobile-services/lists/v3/lists/items", body, nil); err != nil {
+	body := map[string]any{
+		"items": v2Items,
+	}
+
+	if err := c.doRequest(ctx, http.MethodPatch, "/mobile-services/shoppinglist/v2/items", body, nil); err != nil {
 		return fmt.Errorf("add to shopping list failed: %w", err)
 	}
 
 	return nil
 }
 
-// AddProductToShoppingList adds a product to the default shopping list.
-// This is a convenience wrapper around AddToShoppingList.
+// AddProductToShoppingList adds a product to the main shopping list.
 func (c *Client) AddProductToShoppingList(ctx context.Context, productID int, quantity int) error {
-	if quantity <= 0 {
-		quantity = 1
-	}
-
-	items := []ListItem{{
+	return c.AddToShoppingList(ctx, []ListItem{{
 		ProductID: productID,
-		Quantity:  quantity,
-	}}
-
-	return c.AddToShoppingList(ctx, items)
+		Quantity:  max(quantity, 1),
+	}})
 }
 
-// AddFreeTextToShoppingList adds a free-text item (not linked to a product) to the list.
-// Useful for items like "bread" or "eggs" without specifying a specific product.
+// AddFreeTextToShoppingList adds a free-text item (not linked to a product) to the main shopping list.
 func (c *Client) AddFreeTextToShoppingList(ctx context.Context, name string, quantity int) error {
-	if quantity <= 0 {
-		quantity = 1
+	return c.AddToShoppingList(ctx, []ListItem{{
+		Name:     name,
+		Quantity: max(quantity, 1),
+	}})
+}
+
+// AddToFavoriteList adds products to a named favorite list (v3) using GraphQL.
+// Use GetShoppingLists to get the list IDs.
+func (c *Client) AddToFavoriteList(ctx context.Context, listID string, productIDs []int) error {
+	const mutation = `mutation AddProductsToFavoriteList($favoriteListId: String!, $products: [FavoriteListProductMutation!]!) {
+  favoriteListProductsAddV2(id: $favoriteListId, products: $products) {
+    __typename
+    status
+    errorMessage
+  }
+}`
+
+	products := make([]map[string]int, 0, len(productIDs))
+	for _, id := range productIDs {
+		products = append(products, map[string]int{"productId": id})
 	}
 
-	items := []ListItem{{
-		Name:     name,
-		Quantity: quantity,
-	}}
+	variables := map[string]any{
+		"favoriteListId": strings.ToUpper(listID),
+		"products":       products,
+	}
 
-	return c.AddToShoppingList(ctx, items)
+	var result struct {
+		FavoriteListProductsAddV2 struct {
+			Status       string `json:"status"`
+			ErrorMessage string `json:"errorMessage"`
+		} `json:"favoriteListProductsAddV2"`
+	}
+
+	if err := c.doGraphQL(ctx, mutation, variables, &result); err != nil {
+		return fmt.Errorf("add to favorite list failed: %w", err)
+	}
+
+	if result.FavoriteListProductsAddV2.Status != "SUCCESS" {
+		return fmt.Errorf("add to favorite list failed: %s", result.FavoriteListProductsAddV2.ErrorMessage)
+	}
+
+	return nil
 }
 
 // RemoveFromShoppingList removes an item from the shopping list.

@@ -173,9 +173,10 @@ func (c *Client) GetProductFull(ctx context.Context, productID int) (*Product, e
 	}
 
 	nutritionInfo, err := c.fetchNutritionalInfo(ctx, productID)
-	if err == nil && nutritionInfo != nil {
-		product.NutritionalInfo = nutritionInfo
+	if err != nil {
+		return nil, fmt.Errorf("get product nutrition failed: %w", err)
 	}
+	product.NutritionalInfo = nutritionInfo
 
 	return product, nil
 }
@@ -199,9 +200,9 @@ func (c *Client) fetchNutritionalInfo(ctx context.Context, productID int) ([]Nut
 	for _, nutrition := range resp.Product.TradeItem.Nutritions {
 		for _, n := range nutrition.Nutrients {
 			nutritionalInfo = append(nutritionalInfo, NutritionalInfo{
-				Amount: n.Value, // Contains value with unit, e.g., "15.5 g"
-				Unit:   n.Name,  // Display name, e.g., "Fat"
-				Type:   NutrientType(n.Type),
+				Name:  n.Name,
+				Type:  n.Type,
+				Value: n.Value,
 			})
 		}
 	}

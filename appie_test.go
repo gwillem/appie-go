@@ -289,6 +289,64 @@ func TestGetProduct(t *testing.T) {
 	t.Logf("  NutriScore: %s, IsBonus: %v", product.NutriScore, product.IsBonus)
 }
 
+func TestGetProductFull(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+
+	product, err := client.GetProductFull(ctx, 436752)
+	if err != nil {
+		t.Fatalf("failed to get full product: %v", err)
+	}
+
+	t.Logf("Product: %s (ID: %d)", product.Title, product.ID)
+	t.Logf("  Nutritional info: %d entries", len(product.NutritionalInfo))
+	for _, n := range product.NutritionalInfo {
+		t.Logf("    %s (%s): %s", n.Name, n.Type, n.Value)
+	}
+}
+
+func TestFetchNutritionalInfoMock(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"product": map[string]any{
+					"id": 123,
+					"tradeItem": map[string]any{
+						"nutritions": []map[string]any{
+							{
+								"nutrients": []map[string]any{
+									{"type": "FAT", "name": "Fat", "value": "15.5 g"},
+									{"type": "PROTEIN", "name": "Protein", "value": "8.2 g"},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	ctx := context.Background()
+
+	info, err := client.fetchNutritionalInfo(ctx, 123)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(info) != 2 {
+		t.Fatalf("expected 2 nutrients, got %d", len(info))
+	}
+
+	if info[0].Name != "Fat" || info[0].Type != "FAT" || info[0].Value != "15.5 g" {
+		t.Errorf("unexpected first nutrient: %+v", info[0])
+	}
+	if info[1].Name != "Protein" || info[1].Type != "PROTEIN" || info[1].Value != "8.2 g" {
+		t.Errorf("unexpected second nutrient: %+v", info[1])
+	}
+}
+
 func TestGetBonusProducts(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()

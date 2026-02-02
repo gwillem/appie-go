@@ -24,17 +24,14 @@ type Config struct {
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
-// NutrientType represents the type of nutrient in nutritional information.
-type NutrientType string
-
-// NutritionalInfo represents nutritional information for a product.
+// NutritionalInfo represents a single nutrient value for a product.
 type NutritionalInfo struct {
-	// Amount is the quantity of this nutrient (e.g., "15", "2.5").
-	Amount string `json:"amount,omitempty"`
-	// Unit is the measurement unit (e.g., "g", "kcal", "kJ").
-	Unit string `json:"unit,omitempty"`
-	// Type identifies the nutrient (e.g., "ENERGY", "PROTEIN", "FAT").
-	Type NutrientType `json:"type,omitempty"`
+	// Name is the display name (e.g., "Fat", "Protein", "Energy").
+	Name string `json:"name"`
+	// Type is the nutrient identifier (e.g., "FAT", "PROTEIN", "ENERGY").
+	Type string `json:"type"`
+	// Value is the amount with unit (e.g., "15.5 g", "250 kcal").
+	Value string `json:"value"`
 }
 
 // Product represents an AH product with pricing and availability information.

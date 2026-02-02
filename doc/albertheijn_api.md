@@ -27,11 +27,15 @@ Base URL: `https://api.ah.nl`
 | | Checkout | |
 | **Shopping Lists** | Get lists (v3) | ✅ |
 | | Get items (v2) | ✅ |
+| | Add items (v2 PATCH) | ✅ |
+| | Add to favorite list (GraphQL) | ✅ |
 | **Member** | FetchMember (GraphQL) | ✅ |
-| **Stores** | FetchStore | |
-| | GetFavoriteStore | |
+| **Stores** | FetchStore (GraphQL) | |
+| | GetFavoriteStore (GraphQL) | |
+| **Recipes** | FetchRecipes (GraphQL) | |
+| **Pricing** | FetchTotalPrice (GraphQL) | |
 | **Recommendations** | Crosssells | |
-| | Don't forget | ✅ |
+| | Don't forget | |
 | **Receipts** | Get all receipts | ✅ |
 | | Get receipt by ID | ✅ |
 | **Config** | Feature flags | ✅ |
@@ -431,6 +435,36 @@ Note: The `productId` parameter is required but returns all lists regardless of 
 ]
 ```
 
+### Add Items to Shopping List (v2)
+
+```
+PATCH /mobile-services/shoppinglist/v2/items
+```
+
+**Request:**
+```json
+{
+  "items": [
+    {
+      "description": "AH Woksaus teriyaki",
+      "strikeThrough": false,
+      "originCode": "PRD",
+      "productId": 482500,
+      "type": "SHOPPABLE",
+      "searchTerm": "AH Woksaus teriyaki",
+      "quantity": 1
+    }
+  ]
+}
+```
+
+**Fields:**
+- `type`: `SHOPPABLE` for products
+- `originCode`: `PRD` for product-linked items, `TXT` for free-text items
+- `description` / `searchTerm`: product title
+
+**Response:** Full shopping list state (same format as GET below).
+
 ### Get List Items (v2)
 
 ```
@@ -557,6 +591,25 @@ GET /mobile-services/bonuspage/v2/section/spotlight?application=AHWEBSHOP&date=<
 POST /mobile-services/v2/recommendations/crosssells
 ```
 
+**Request:**
+```json
+{
+  "limit": 6,
+  "experimentId": "exp-var-with-category",
+  "productId": 165625,
+  "propensityFilter": true,
+  "basketItems": [
+    {
+      "productId": 165625,
+      "position": 2,
+      "quantity": 1
+    }
+  ]
+}
+```
+
+**Response:** Same format as Don't Forget Lane (see below).
+
 ### Get "Don't Forget" Lane
 
 ```
@@ -568,8 +621,14 @@ POST /mobile-services/v2/recommendations/dontforgetlane
 {
   "positiveCmOnly": true,
   "offset": 0,
-  "usecaseId": "app_home",
-  "basketItems": [],
+  "usecaseId": "app_mylist",
+  "basketItems": [
+    {
+      "quantity": 1,
+      "position": 1,
+      "productId": 482500
+    }
+  ],
   "limit": 7
 }
 ```
@@ -578,9 +637,9 @@ POST /mobile-services/v2/recommendations/dontforgetlane
 ```json
 {
   "dataLakeModel": {
-    "name": "",
+    "name": "TransformerModelWithCategory",
     "requestId": "",
-    "version": ""
+    "version": "2026_02_01-11_50"
   },
   "productCards": [
     {
@@ -643,16 +702,22 @@ apollographql-client-version: 9.28-260102201630
 | Operation | Description | Status |
 |-----------|-------------|--------|
 | FetchMember | Get member profile, address, cards | ✅ Implemented |
+| FetchProduct (nutrition) | Get nutritional info via tradeItem | ✅ Implemented |
+| AddProductsToFavoriteList | Add products to named list | ✅ Implemented |
 | FetchOrderTrackTrace | Track and trace info for order | ✅ Implemented |
+| FetchStore | Store details by ID | |
+| GetFavoriteStore | User's favorite store | |
+| FetchRecipes | Recipe search | |
+| FetchTotalPrice | Calculate order total price | |
+| SearchProducts | Product search with facets/variants | |
 | FetchEntryPoints | Home screen entry points | |
 | FetchCuratedLists | Curated shopping lists | |
 | FetchNBACard | Next best action card | |
 | FetchPageEntries | Page entries | |
 | FetchPageTemplate | Page templates | |
+| FetchPersonalizedAdvertisementV2 | Targeted promotions | |
 | FetchPurchaseStampServerTime | Purchase stamp time | |
 | FetchSmartLane | Smart suggestions lane | |
-| FetchStore | Store details | |
-| GetFavoriteStore | User's favorite store | |
 | MessageCenterGetUnreadMessagesInfo | Unread messages count | |
 
 #### FetchMember
@@ -790,6 +855,190 @@ query FetchOrderTrackTrace($orderId: Int!) {
 
 **Track Types:** `DELIVERED`, `IN_TRANSIT`, `PREPARING`, etc.
 
+#### AddProductsToFavoriteList
+
+Adds products to a named favorite list (v3).
+
+```graphql
+mutation AddProductsToFavoriteList($favoriteListId: String!, $products: [FavoriteListProductMutation!]!) {
+  favoriteListProductsAddV2(id: $favoriteListId, products: $products) {
+    __typename
+    status
+    errorMessage
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "favoriteListId": "181CBC7B-0088-4EAF-9E7F-8EEF8F8BBDBA",
+  "products": [
+    { "productId": 482500 }
+  ]
+}
+```
+
+Note: `favoriteListId` must be uppercase UUID.
+
+**Response:**
+```json
+{
+  "data": {
+    "favoriteListProductsAddV2": {
+      "status": "SUCCESS",
+      "errorMessage": null
+    }
+  }
+}
+```
+
+#### FetchRecipes
+
+Search for recipes with filters and pagination.
+
+```graphql
+query FetchRecipes($searchText: String, $start: Int, $size: PageSize, $sortBy: RecipeSearchSortOption, $filters: [RecipeSearchQueryFilter!], $priorityRecipeIds: [Int!], $boostFavoriteRecipeIds: [Int!], $recipeIds: [Int!]!, $ingredients: [String!]) {
+  recipeSearchV2(searchText: $searchText, start: $start, size: $size, sortBy: $sortBy, filters: $filters, priorityRecipeIds: $priorityRecipeIds, boostFavoriteRecipeIds: $boostFavoriteRecipeIds, recipeIds: $recipeIds, ingredients: $ingredients) {
+    __typename
+    correctedSearchTerm
+    page { __typename total hasNextPage }
+    filters {
+      __typename label name
+      filters { __typename name label group count selected }
+    }
+    result { __typename ...RecipeSummaryFragment }
+  }
+}
+fragment RecipeImageFragment on RecipeImage { __typename width height url }
+fragment RecipeSummaryFragment on RecipeSummary {
+  __typename id title
+  time { __typename cook }
+  images(renditions: [S, M, D445X297, D890X594]) { __typename ...RecipeImageFragment }
+  author { __typename origin { __typename type hostName url } }
+  flags nutriScore
+  tags { __typename key value }
+}
+```
+
+**Variables:**
+```json
+{
+  "searchText": "pasta",
+  "start": 0,
+  "size": 7,
+  "sortBy": "MOST_RELEVANT",
+  "filters": [],
+  "priorityRecipeIds": [],
+  "boostFavoriteRecipeIds": [],
+  "recipeIds": [],
+  "ingredients": []
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "recipeSearchV2": {
+      "correctedSearchTerm": null,
+      "page": { "total": 245, "hasNextPage": true },
+      "result": [
+        {
+          "id": 12345,
+          "title": "Pasta carbonara",
+          "time": { "cook": 25 },
+          "images": [{ "width": 890, "height": 594, "url": "https://..." }],
+          "nutriScore": "B",
+          "tags": [{ "key": "cuisine", "value": "Italiaans" }]
+        }
+      ]
+    }
+  }
+}
+```
+
+#### FetchTotalPrice
+
+Calculate total price for a set of products (includes bonus discounts).
+
+```graphql
+query FetchTotalPrice($products: [PriceLineItem!]!) {
+  totalPrice(products: $products) {
+    __typename
+    withoutDiscount { __typename amount }
+    discount { __typename amount }
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "products": [
+    { "id": 165625, "quantity": 1 },
+    { "id": 482500, "quantity": 1 }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "totalPrice": {
+      "withoutDiscount": { "amount": 5.58 },
+      "discount": { "amount": 0.38 }
+    }
+  }
+}
+```
+
+The final price is `withoutDiscount.amount - discount.amount`.
+
+#### FetchProduct (Nutritional Info)
+
+Fetch nutritional info for a product via its tradeItem.
+
+```graphql
+query FetchProduct($productId: Int!) {
+  product(id: $productId) {
+    id
+    tradeItem {
+      nutritions {
+        nutrients { type name value }
+      }
+    }
+  }
+}
+```
+
+**Variables:**
+```json
+{ "productId": 436752 }
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "product": {
+      "id": 436752,
+      "tradeItem": {
+        "nutritions": [{
+          "nutrients": [
+            { "type": "ENER-", "name": "Energie", "value": "1011 kJ (243 kcal)" },
+            { "type": "FAT", "name": "Vet", "value": "18 g" },
+            { "type": "PRO-", "name": "Eiwitten", "value": "20 g" },
+            { "type": "SALTEQ", "name": "Zout", "value": "0.33 g" }
+          ]
+        }]
+      }
+    }
+  }
+}
+```
+
 #### FetchEntryPoints
 
 Fetches UI entry points for the home screen.
@@ -822,7 +1071,40 @@ query FetchEntryPoints($name: String!, $version: String) {
 query GetFavoriteStore {
   storesFavouriteStore {
     __typename
-    ...StoreFragment
+    ...StoresFragment
+  }
+}
+fragment GeolocationFragment on GeoLocation { __typename latitude longitude }
+fragment StoresFragment on Stores {
+  __typename id
+  address { __typename street houseNumber houseNumberExtra postalCode city countryCode }
+  openingDays { __typename date openingHour { __typename openFrom openUntil } }
+  geoLocation { __typename ...GeolocationFragment }
+  phone storeType
+  services { __typename code }
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "storesFavouriteStore": {
+      "id": 1527,
+      "address": {
+        "street": "Nachtegaalstraat",
+        "houseNumber": 48,
+        "postalCode": "3581AD",
+        "city": "Utrecht"
+      },
+      "openingDays": [
+        { "date": "2026-02-03", "openingHour": { "openFrom": "08:00", "openUntil": "22:00" } }
+      ],
+      "geoLocation": { "latitude": 52.09, "longitude": 5.12 },
+      "phone": "030-2345678",
+      "storeType": "AH",
+      "services": [{ "code": "PICKUP" }, { "code": "SELFSERVICE" }]
+    }
   }
 }
 ```
@@ -831,11 +1113,18 @@ query GetFavoriteStore {
 
 ```graphql
 query FetchStore($storeId: Int!) {
-  store(storeId: $storeId) {
+  storesInformation(id: $storeId) {
     __typename
-    ...StoreFragment
+    ...StoresFragment
   }
 }
+```
+
+Uses same `StoresFragment` as GetFavoriteStore above.
+
+**Variables:**
+```json
+{ "storeId": 1527 }
 ```
 
 ---

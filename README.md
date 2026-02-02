@@ -50,28 +50,14 @@ func main() {
 
 ### Authenticated Access
 
-For orders, shopping lists, and member data, you need to authenticate:
+For orders, shopping lists, and member data, you need to authenticate.
+Use the login tool to obtain and save tokens:
 
-```go
-// 1. Get login URL and open in browser
-client := appie.New()
-fmt.Println("Open this URL:", client.LoginURL())
-
-// 2. After login, browser redirects to: appie://login-exit?code=AUTH_CODE
-// Extract the code and exchange it:
-if err := client.ExchangeCode(ctx, "AUTH_CODE"); err != nil {
-    log.Fatal(err)
-}
-
-// 3. Save tokens for future use
-client = appie.New(
-    appie.WithConfigPath(".appie.json"),
-    appie.WithTokens(client.AccessToken(), client.RefreshTokenValue()),
-)
-client.SaveConfig()
+```bash
+go run ./cmd/login
 ```
 
-Or load from saved config:
+Then load from saved config:
 
 ```go
 client, err := appie.NewWithConfig(".appie.json")
@@ -83,6 +69,8 @@ if !client.IsAuthenticated() {
     // Need to login first
 }
 ```
+
+Expired access tokens are automatically refreshed using the stored refresh token.
 
 ### Receipts (Kassabonnen)
 
@@ -125,7 +113,7 @@ client := appie.New(
 {
   "access_token": "eyJ...",
   "refresh_token": "eyJ...",
-  "member_id": "12345678"
+  "expires_at": "2025-02-09T12:00:00Z"
 }
 ```
 
@@ -137,9 +125,6 @@ The repository includes several CLI tools in `cmd/`:
 # Login and save credentials
 go run ./cmd/login
 
-# Dump feature flags
-go run ./cmd/dump-feature-flags
-
 # Dump member profile data
 go run ./cmd/dump-member
 
@@ -149,7 +134,7 @@ go run ./cmd/dump-graphql
 
 ## Notes
 
-- Tokens expire after ~7 days. Use `RefreshToken()` to get new tokens.
+- Tokens expire after ~7 days. Expired tokens are automatically refreshed when using `NewWithConfig()`.
 - The API uses both REST and GraphQL endpoints internally.
 - Anonymous tokens work for product browsing but not for orders or member data.
 - Rate limiting may apply; implement backoff for production use.

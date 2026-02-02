@@ -24,6 +24,19 @@ type Config struct {
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
+// NutrientType represents the type of nutrient in nutritional information.
+type NutrientType string
+
+// NutritionalInfo represents nutritional information for a product.
+type NutritionalInfo struct {
+	// Amount is the quantity of this nutrient (e.g., "15", "2.5").
+	Amount string `json:"amount,omitempty"`
+	// Unit is the measurement unit (e.g., "g", "kcal", "kJ").
+	Unit string `json:"unit,omitempty"`
+	// Type identifies the nutrient (e.g., "ENERGY", "PROTEIN", "FAT").
+	Type NutrientType `json:"type,omitempty"`
+}
+
 // Product represents an AH product with pricing and availability information.
 type Product struct {
 	// ID is the webshop product ID used for ordering.
@@ -46,6 +59,8 @@ type Product struct {
 	Images []Image `json:"images,omitempty"`
 	// NutriScore is the nutritional score (A-E).
 	NutriScore string `json:"nutriScore,omitempty"`
+	// NutritionalInfo contains detailed nutritional values for the product.
+	NutritionalInfo []NutritionalInfo `json:"nutritionalInfo,omitempty"`
 	// IsBonus indicates if the product is currently on promotion.
 	IsBonus bool `json:"isBonus"`
 	// BonusMechanism describes the type of bonus (e.g., "25% korting").

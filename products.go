@@ -47,6 +47,37 @@ type imageResponse struct {
 	URL    string `json:"url"`
 }
 
+// GraphQL query for fetching product nutritional info via tradeItem
+const fetchProductNutritionQuery = `query FetchProduct($productId: Int!) {
+  product(id: $productId) {
+    id
+    tradeItem {
+      nutritions {
+        nutrients {
+          type
+          name
+          value
+        }
+      }
+    }
+  }
+}`
+
+type productNutritionResponse struct {
+	Product struct {
+		ID        int `json:"id"`
+		TradeItem *struct {
+			Nutritions []struct {
+				Nutrients []struct {
+					Type  string `json:"type"`
+					Name  string `json:"name"`
+					Value string `json:"value"`
+				} `json:"nutrients"`
+			} `json:"nutritions"`
+		} `json:"tradeItem"`
+	} `json:"product"`
+}
+
 func (p *productResponse) toProduct() Product {
 	var images []Image
 	for _, img := range p.Images {
@@ -116,12 +147,12 @@ func (c *Client) SearchProducts(ctx context.Context, query string, limit int) ([
 }
 
 // GetProduct retrieves a single product by its webshopId.
-// Returns detailed product information including nutritional data and images.
+// For nutritional information, use GetProductFull instead.
 func (c *Client) GetProduct(ctx context.Context, productID int) (*Product, error) {
 	path := fmt.Sprintf("/mobile-services/product/detail/v4/fir/%d", productID)
 
 	var result struct {
-		ProductID   int `json:"productId"`
+		ProductID   int             `json:"productId"`
 		ProductCard productResponse `json:"productCard"`
 	}
 
@@ -131,6 +162,51 @@ func (c *Client) GetProduct(ctx context.Context, productID int) (*Product, error
 
 	product := result.ProductCard.toProduct()
 	return &product, nil
+}
+
+// GetProductFull retrieves a product with full details including nutritional info.
+// This makes an additional GraphQL call for nutritional data.
+func (c *Client) GetProductFull(ctx context.Context, productID int) (*Product, error) {
+	product, err := c.GetProduct(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+
+	nutritionInfo, err := c.fetchNutritionalInfo(ctx, productID)
+	if err == nil && nutritionInfo != nil {
+		product.NutritionalInfo = nutritionInfo
+	}
+
+	return product, nil
+}
+
+// fetchNutritionalInfo fetches nutritional data for a product via GraphQL.
+func (c *Client) fetchNutritionalInfo(ctx context.Context, productID int) ([]NutritionalInfo, error) {
+	variables := map[string]any{
+		"productId": productID,
+	}
+
+	var resp productNutritionResponse
+	if err := c.doGraphQL(ctx, fetchProductNutritionQuery, variables, &resp); err != nil {
+		return nil, err
+	}
+
+	if resp.Product.TradeItem == nil || len(resp.Product.TradeItem.Nutritions) == 0 {
+		return nil, nil
+	}
+
+	var nutritionalInfo []NutritionalInfo
+	for _, nutrition := range resp.Product.TradeItem.Nutritions {
+		for _, n := range nutrition.Nutrients {
+			nutritionalInfo = append(nutritionalInfo, NutritionalInfo{
+				Amount: n.Value, // Contains value with unit, e.g., "15.5 g"
+				Unit:   n.Name,  // Display name, e.g., "Fat"
+				Type:   NutrientType(n.Type),
+			})
+		}
+	}
+
+	return nutritionalInfo, nil
 }
 
 // GetProductsByIDs retrieves multiple products by their webshopIds in a single request.

@@ -17,8 +17,9 @@ Base URL: `https://api.ah.nl`
 | | Categories | |
 | **Bonus** | By category | ✅ |
 | | Spotlight | ✅ |
+| | Personal | |
 | | Previously bought | |
-| | Metadata | |
+| | Metadata | ✅ |
 | **Orders** | Get active | ✅ |
 | | Add/update items | ✅ |
 | | Update state | ✅ |
@@ -29,13 +30,18 @@ Base URL: `https://api.ah.nl`
 | | Get items (v2) | ✅ |
 | | Add items (v2 PATCH) | ✅ |
 | | Add to favorite list (GraphQL) | ✅ |
+| | Favorite lists (GraphQL) | |
+| | My list basket (GraphQL) | |
 | **Member** | FetchMember (GraphQL) | ✅ |
 | **Stores** | FetchStore (GraphQL) | |
 | | GetFavoriteStore (GraphQL) | |
 | **Recipes** | FetchRecipes (GraphQL) | |
 | **Pricing** | FetchTotalPrice (GraphQL) | |
+| **Bonus Box** | Bonus box offers (GraphQL) | |
+| **Orders** (GraphQL) | Minimum value limits | |
 | **Recommendations** | Crosssells | |
 | | Don't forget | |
+| | Recommended recipes (GraphQL) | |
 | **Receipts** | Get all receipts | ✅ |
 | | Get receipt by ID | ✅ |
 | **Config** | Feature flags | ✅ |
@@ -575,6 +581,37 @@ GET /mobile-services/bonuspage/v2/section?application=AHWEBSHOP&category=<catego
 GET /mobile-services/bonuspage/v2/section/previously-bought?application=AHWEBSHOP&date=<YYYY-MM-DD>
 ```
 
+### Get Personal Bonus Products
+
+```
+GET /mobile-services/bonuspage/v2/section/personal?application=AHWEBSHOP&date=<YYYY-MM-DD>
+```
+
+**Response:**
+```json
+{
+  "sectionType": "PO",
+  "sectionDescription": "Persoonlijke Bonus",
+  "bonusGroupOrProducts": [
+    {
+      "bonusGroup": {
+        "id": "385568",
+        "offerId": 894018,
+        "segmentDescription": "AH Pancakes",
+        "discountDescription": "VOOR 2.00",
+        "category": "Maaltijden, salades",
+        "promotionType": "PERSONAL",
+        "segmentType": "BBOX",
+        "activationStatus": "ACTIVATED",
+        "bonusStartDate": "2026-02-09",
+        "bonusEndDate": "2026-02-15",
+        "images": [...]
+      }
+    }
+  ]
+}
+```
+
 ### Get Spotlight Bonus
 
 ```
@@ -718,7 +755,17 @@ apollographql-client-version: 9.28-260102201630
 | FetchPersonalizedAdvertisementV2 | Targeted promotions | |
 | FetchPurchaseStampServerTime | Purchase stamp time | |
 | FetchSmartLane | Smart suggestions lane | |
+| FetchMyListBasket | Get basket/order with product details | |
+| FetchFavoriteLists | Get user's favorite lists | |
+| FetchBonusBoxOffers | Personal bonus box promotions | |
+| FetchRecommendedRecipes | Recipe recommendations | |
+| FetchOrderMinimumValueLimits | Order minimum value check | |
+| FetchExpandDestinations | Federated domain destinations | |
+| FetchPageEntryThemesConfiguration | Theme/color configuration | |
+| GetConsentsToShow | Member consents to display | |
 | MessageCenterGetUnreadMessagesInfo | Unread messages count | |
+| CommunicationConsentDeviceNotificationSettingsUpdate | Update notification settings (mutation) | |
+| PushNotificationsTokenUpdate | Register push token (mutation) | |
 
 #### FetchMember
 
@@ -1125,6 +1172,279 @@ Uses same `StoresFragment` as GetFavoriteStore above.
 **Variables:**
 ```json
 { "storeId": 1527 }
+```
+
+#### FetchMyListBasket
+
+Fetches the current basket (shopping cart) with full product details, notes, and order delivery info.
+
+```graphql
+query FetchMyListBasket($input: BasketInput, $states: [BonusSegmentState!]) {
+  basket(input: $input) {
+    __typename
+    canChangeDelivery
+    itemsInOrder {
+      __typename position originCode isClosed allocatedQuantity quantity
+      product { __typename ...MyListBasketProductFragment }
+    }
+    notes { __typename description isStrikethrough originCode position quantity searchTerm }
+    products {
+      __typename isStrikethrough originCode position quantity
+      product { __typename ...MyListBasketProductFragment }
+    }
+    summary {
+      __typename isCancellable quantity shoppingType lastUserChangeDateTime
+      price {
+        __typename
+        discount { __typename amount }
+        totalPrice { __typename amount }
+        priceAfterDiscount { __typename amount }
+        priceBeforeDiscount { __typename amount }
+      }
+    }
+  }
+  order {
+    __typename
+    delivery {
+      __typename
+      address { __typename street houseNumber houseNumberExtra zipCode city countryCode }
+      date endTime startTime status id shiftCode pickupLocationId
+    }
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "input": null,
+  "states": ["ACTIVATED", "ASSIGNED", "NONE", "REDEEMABLE"]
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "basket": {
+      "canChangeDelivery": true,
+      "itemsInOrder": null,
+      "notes": [],
+      "products": [],
+      "summary": {
+        "isCancellable": null,
+        "price": {
+          "discount": { "amount": 0 },
+          "totalPrice": { "amount": 0 },
+          "priceAfterDiscount": { "amount": 0 },
+          "priceBeforeDiscount": { "amount": 0 }
+        },
+        "quantity": 0,
+        "shoppingType": null,
+        "lastUserChangeDateTime": null
+      }
+    },
+    "order": null
+  }
+}
+```
+
+#### FetchFavoriteLists
+
+Fetches the user's favorite (named) lists with metadata.
+
+```graphql
+query FetchFavoriteLists($ids: [String!]!, $productIds: [Int!]!) {
+  favoriteListV2(ids: $ids, productIds: $productIds) {
+    __typename
+    ...FavoriteListFragment
+  }
+}
+fragment FavoriteListFragment on FavoriteListV2 {
+  __typename id description totalSize imageUrl
+}
+```
+
+**Variables:**
+```json
+{
+  "ids": [],
+  "productIds": []
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "favoriteListV2": [
+      {
+        "id": "305e6a50-a970-457b-8831-409f572832d4",
+        "description": "Weekboodschappen",
+        "totalSize": 5,
+        "imageUrl": "https://static.ah.nl/dam/product/..."
+      }
+    ]
+  }
+}
+```
+
+#### FetchBonusBoxOffers
+
+Fetches personal bonus box promotions (personalized deals).
+
+```graphql
+query FetchBonusBoxOffers($filterSet: PromotionsFilterSet, $periodStart: String, $periodEnd: String, $orderId: Int, $forcePromotionVisibility: Boolean = true, $filterUnavailableProducts: Boolean = false, $states: [BonusSegmentState!]) {
+  bonusPersonalPromotionBundles(validOn: $periodStart) {
+    __typename maximumActivations error
+  }
+  bonusPromotions(filterSet: $filterSet input: { periodStart: $periodStart periodEnd: $periodEnd orderId: $orderId filterUnavailableProducts: $filterUnavailableProducts forcePromotionVisibility: $forcePromotionVisibility states: $states }) {
+    __typename
+    ...BonusPromotionCardFragment
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "filterSet": "APP_BONUS_BOX",
+  "filterUnavailableProducts": false,
+  "forcePromotionVisibility": true,
+  "periodEnd": "2026-02-15",
+  "periodStart": "2026-02-09",
+  "states": ["ACTIVATABLE", "ACTIVATED"]
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "bonusPersonalPromotionBundles": [
+      { "maximumActivations": 10, "error": null }
+    ],
+    "bonusPromotions": [
+      {
+        "id": "385568",
+        "hqId": 894018,
+        "title": "AH Pancakes",
+        "activationStatus": "ACTIVATED",
+        "category": "Maaltijden, salades",
+        "promotionType": "PERSONAL",
+        "segmentType": "BONUS_BOX",
+        "periodStart": "2026-02-09",
+        "periodEnd": "2026-02-15",
+        "rawPromotionLabels": [
+          { "mechanism": "PRICE", "price": 2.0, "defaultDescription": "VOOR 2.00" }
+        ],
+        "price": {
+          "now": { "amount": 2.0 },
+          "was": { "amount": 2.99 }
+        }
+      }
+    ]
+  }
+}
+```
+
+#### FetchRecommendedRecipes
+
+Fetches personalized recipe recommendations based on member preferences.
+
+```graphql
+query FetchRecommendedRecipes($shouldSkipRecentlyShopped: Boolean!, $testGroup: String = null, $recommendationDate: String = null) {
+  recommendations: recipeRecommendationLane(testGroup: $testGroup recommendationDate: $recommendationDate) {
+    __typename
+    memberPreferencePreviewOptions { __typename href label value image { __typename url width height } }
+    recipeRecommendations { __typename id recipe { __typename ...RecipeSummaryFragment } }
+    bonusRecipes { __typename recipe { __typename ...RecipeSummaryFragment } }
+    genericRecipeRecommendations { __typename recipe { __typename ...RecipeSummaryFragment } }
+    preferenceTilePosition
+    servingSize
+    availableWeeks { __typename startDate endDate activeWeek }
+  }
+  recentlyShopped: recipeShoppedRecipes @skip(if: $shouldSkipRecentlyShopped) {
+    __typename lastShoppedAt recipe { __typename id }
+  }
+}
+```
+
+Uses same `RecipeSummaryFragment` as FetchRecipes above.
+
+**Variables:**
+```json
+{
+  "shouldSkipRecentlyShopped": true,
+  "testGroup": null
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "recommendations": {
+      "memberPreferencePreviewOptions": [
+        {
+          "href": "https://www.ah.nl/allerhande/voorkeuren?mobile=true&dieet=FLEXITARISCH",
+          "label": "Mix van vlees, vis en groente",
+          "value": "FLEXITARIAN",
+          "image": { "url": "https://static.ah.nl/static/preferences/flexitarian.png", "width": 87, "height": 87 }
+        }
+      ],
+      "recipeRecommendations": [
+        {
+          "id": "12345",
+          "recipe": {
+            "id": 12345,
+            "title": "Pasta carbonara",
+            "time": { "cook": 25 },
+            "nutriScore": "B"
+          }
+        }
+      ],
+      "bonusRecipes": [],
+      "servingSize": 2,
+      "availableWeeks": [
+        { "startDate": "2026-02-09", "endDate": "2026-02-15", "activeWeek": true }
+      ]
+    }
+  }
+}
+```
+
+#### FetchOrderMinimumValueLimits
+
+Checks if an order meets the minimum value requirement for submission.
+
+```graphql
+query FetchOrderMinimumValueLimits($orderId: Int!) {
+  orderValueLimits(orderId: $orderId) {
+    __typename
+    minimumOrderValue { __typename amount }
+    submittable
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "orderId": 196321485
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "orderValueLimits": {
+      "minimumOrderValue": { "amount": 50 },
+      "submittable": true
+    }
+  }
+}
 ```
 
 ---

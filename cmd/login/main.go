@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	appie "github.com/gwillem/appie-go"
@@ -23,38 +24,14 @@ func main() {
 	}
 
 	client := appie.New(appie.WithConfigPath(configPath))
-	ctx := context.Background()
 
-	fmt.Println()
-	fmt.Println("=== Albert Heijn Login ===")
-	fmt.Println()
-	fmt.Println("1. Open this URL in your browser:")
-	fmt.Println()
-	fmt.Printf("   %s\n", client.LoginURL())
-	fmt.Println()
-	fmt.Println("2. Login with your credentials")
-	fmt.Println("3. After login, browser will try to open 'appie://login-exit?code=...'")
-	fmt.Println("4. Copy the 'code' value from the URL (or the full URL)")
-	fmt.Println()
-	fmt.Print("Paste code here: ")
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
-		os.Exit(1)
-	}
+	fmt.Println("Opening browser for AH login...")
 
-	code := extractCode(strings.TrimSpace(input))
-	if code == "" {
-		fmt.Fprintf(os.Stderr, "Could not extract code from input\n")
-		os.Exit(1)
-	}
-
-	fmt.Println()
-	fmt.Println("Exchanging code for tokens...")
-
-	if err := client.ExchangeCode(ctx, code); err != nil {
-		fmt.Fprintf(os.Stderr, "Token exchange failed: %v\n", err)
+	if err := client.Login(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Login failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -63,24 +40,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println()
-	fmt.Println("=== LOGIN SUCCESSFUL ===")
-	fmt.Println()
-	fmt.Printf("Tokens saved to %s\n", configPath)
-}
-
-func extractCode(input string) string {
-	if !strings.Contains(input, "=") && !strings.Contains(input, "?") {
-		return input
-	}
-
-	if idx := strings.Index(input, "code="); idx != -1 {
-		code := input[idx+5:]
-		if ampIdx := strings.Index(code, "&"); ampIdx != -1 {
-			code = code[:ampIdx]
-		}
-		return code
-	}
-
-	return ""
+	fmt.Printf("Login successful! Tokens saved to %s\n", configPath)
 }

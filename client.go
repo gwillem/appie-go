@@ -38,7 +38,9 @@ type Client struct {
 	orderID      string
 	orderHash    string
 
-	configPath string
+	configPath   string
+	loginBaseURL string      // overridable for testing; defaults to "https://login.ah.nl"
+	openBrowser  func(string) // overridable for testing; nil uses default
 }
 
 // Option configures the client. Use With* functions to create options.

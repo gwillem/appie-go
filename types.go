@@ -223,6 +223,10 @@ type Fulfillment struct {
 	ShoppingType string `json:"shoppingType"`
 	// TotalPrice is the order total in EUR.
 	TotalPrice float64 `json:"totalPrice"`
+	// TransactionCompleted indicates if the order has been paid/finalized.
+	TransactionCompleted bool `json:"transactionCompleted"`
+	// Modifiable indicates if items can still be added/changed.
+	Modifiable bool `json:"modifiable"`
 	// Delivery contains delivery slot and address information.
 	Delivery FulfillmentDelivery `json:"delivery"`
 }

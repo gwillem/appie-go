@@ -194,7 +194,9 @@ func (c *Client) setHeaders(req *http.Request) {
 	}
 	if c.orderID != "" {
 		req.Header.Set("appie-current-order-id", c.orderID)
-		req.Header.Set("appie-current-order-hash", c.orderHash)
+		if c.orderHash != "" {
+			req.Header.Set("appie-current-order-hash", c.orderHash)
+		}
 	}
 	c.mu.RUnlock()
 }

@@ -88,6 +88,14 @@ func (c *Client) GetOrder(ctx context.Context) (*Order, error) {
 	return &order, nil
 }
 
+// SetOrderID manually sets the order ID for subsequent API requests.
+// This is useful when selecting a specific order from fulfillments.
+func (c *Client) SetOrderID(id int) {
+	c.mu.Lock()
+	c.orderID = strconv.Itoa(id)
+	c.mu.Unlock()
+}
+
 // AddToOrder adds or updates items in the current order.
 // If an item already exists, its quantity is updated. Set quantity to 0 to remove.
 //
@@ -105,11 +113,17 @@ func (c *Client) AddToOrder(ctx context.Context, items []OrderItem) error {
 		Strikethrough bool   `json:"strikethrough"`
 	}
 
-	reqItems := make([]itemRequest, 0, len(items))
+	// Merge duplicates: the API rejects requests with duplicate product IDs.
+	merged := make(map[int]int, len(items))
 	for _, item := range items {
+		merged[item.ProductID] += item.Quantity
+	}
+
+	reqItems := make([]itemRequest, 0, len(merged))
+	for pid, qty := range merged {
 		reqItems = append(reqItems, itemRequest{
-			ProductID:     item.ProductID,
-			Quantity:      item.Quantity,
+			ProductID:     pid,
+			Quantity:      qty,
 			OriginCode:    "PRD",
 			Description:   "",
 			Strikethrough: false,
@@ -167,12 +181,45 @@ func (c *Client) GetOrderSummary(ctx context.Context) (*OrderSummary, error) {
 	}, nil
 }
 
+const reopenOrderMutation = `mutation OrderReopen($id: Int!) {
+  orderReopen(id: $id) {
+    status
+    errorMessage
+  }
+}`
+
+// ReopenOrder reopens a submitted order so items can be added or modified.
+// This is required before calling AddToOrder on a fulfillment-selected order.
+func (c *Client) ReopenOrder(ctx context.Context, orderID int) error {
+	type reopenResponse struct {
+		OrderReopen struct {
+			Status       string `json:"status"`
+			ErrorMessage string `json:"errorMessage"`
+		} `json:"orderReopen"`
+	}
+
+	var resp reopenResponse
+	vars := map[string]any{"id": orderID}
+	if err := c.doGraphQL(ctx, reopenOrderMutation, vars, &resp); err != nil {
+		return fmt.Errorf("reopen order failed: %w", err)
+	}
+
+	if resp.OrderReopen.Status != "SUCCESS" {
+		return fmt.Errorf("reopen order failed: %s", resp.OrderReopen.ErrorMessage)
+	}
+
+	return nil
+}
+
 const fulfillmentsQuery = `query OrderFulfillments {
   orderFulfillments(status: OPEN) {
     result {
       orderId
+      statusCode
       statusDescription
       shoppingType
+      transactionCompleted
+      modifiable
       totalPrice {
         totalPrice { amount }
       }
@@ -205,10 +252,13 @@ type fulfillmentsResponse struct {
 }
 
 type fulfillmentResult struct {
-	OrderID           int    `json:"orderId"`
-	StatusDescription string `json:"statusDescription"`
-	ShoppingType      string `json:"shoppingType"`
-	TotalPrice        struct {
+	OrderID              int    `json:"orderId"`
+	StatusCode           int    `json:"statusCode"`
+	StatusDescription    string `json:"statusDescription"`
+	ShoppingType         string `json:"shoppingType"`
+	TransactionCompleted bool   `json:"transactionCompleted"`
+	Modifiable           bool   `json:"modifiable"`
+	TotalPrice           struct {
 		TotalPrice struct {
 			Amount float64 `json:"amount"`
 		} `json:"totalPrice"`
@@ -246,11 +296,13 @@ func (c *Client) GetFulfillments(ctx context.Context) ([]Fulfillment, error) {
 
 	for _, r := range results {
 		fulfillments = append(fulfillments, Fulfillment{
-			OrderID:           r.OrderID,
-			Status:            r.Delivery.Status,
-			StatusDescription: r.StatusDescription,
-			ShoppingType:      r.ShoppingType,
-			TotalPrice:        r.TotalPrice.TotalPrice.Amount,
+			OrderID:              r.OrderID,
+			Status:               r.Delivery.Status,
+			StatusDescription:    r.StatusDescription,
+			ShoppingType:         r.ShoppingType,
+			TotalPrice:           r.TotalPrice.TotalPrice.Amount,
+			TransactionCompleted: r.TransactionCompleted,
+			Modifiable:           r.Modifiable,
 			Delivery: FulfillmentDelivery{
 				Status: r.Delivery.Status,
 				Method: r.Delivery.Method,

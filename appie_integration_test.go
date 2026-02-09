@@ -114,25 +114,6 @@ func TestGetProductFull(t *testing.T) {
 	}
 }
 
-func TestGetBonusProducts(t *testing.T) {
-	client := testClient(t)
-	ctx := context.Background()
-
-	// Category is required - use "Fruit, verse sappen" or similar
-	products, err := client.GetBonusProducts(ctx, "Vlees", 10)
-	if err != nil {
-		t.Fatalf("failed to get bonus products: %v", err)
-	}
-
-	t.Logf("Found %d bonus products in Vlees category", len(products))
-	for i, p := range products {
-		if i >= 5 {
-			break
-		}
-		t.Logf("  - %s: €%.2f (was €%.2f)", p.Title, p.Price.Now, p.Price.Was)
-	}
-}
-
 func TestGetOrder(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()

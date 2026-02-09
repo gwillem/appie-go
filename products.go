@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 )
 
 // searchResponse matches the API response for product search
@@ -235,90 +234,6 @@ func (c *Client) GetProductsByIDs(ctx context.Context, productIDs []int) ([]Prod
 	products := make([]Product, 0, len(result.Products))
 	for _, p := range result.Products {
 		products = append(products, p.toProduct())
-	}
-
-	return products, nil
-}
-
-// bonusSectionResponse matches the API response for bonus section.
-type bonusSectionResponse struct {
-	SectionType          string `json:"sectionType"`
-	SectionDescription   string `json:"sectionDescription"`
-	BonusGroupOrProducts []struct {
-		Product    *productResponse `json:"product,omitempty"`
-		BonusGroup *struct {
-			ID                  string            `json:"id"`
-			DiscountDescription string            `json:"discountDescription"`
-			Products            []productResponse `json:"products"`
-		} `json:"bonusGroup,omitempty"`
-	} `json:"bonusGroupOrProducts"`
-}
-
-// GetBonusProducts retrieves products currently on bonus (promotion).
-// Filter by category (e.g., "Vlees", "Zuivel") or pass empty string for all.
-// If limit is 0 or negative, defaults to 30 products.
-func (c *Client) GetBonusProducts(ctx context.Context, category string, limit int) ([]Product, error) {
-	if limit <= 0 {
-		limit = 30
-	}
-
-	params := url.Values{}
-	params.Set("application", "AHWEBSHOP")
-	params.Set("date", time.Now().Format("2006-01-02"))
-	params.Set("promotionType", "NATIONAL")
-	if category != "" {
-		params.Set("category", category)
-	}
-
-	path := "/mobile-services/bonuspage/v2/section?" + params.Encode()
-
-	var result bonusSectionResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
-		return nil, fmt.Errorf("get bonus products failed: %w", err)
-	}
-
-	var products []Product
-	for _, item := range result.BonusGroupOrProducts {
-		if item.Product != nil {
-			products = append(products, item.Product.toProduct())
-		}
-		if item.BonusGroup != nil {
-			for _, p := range item.BonusGroup.Products {
-				products = append(products, p.toProduct())
-			}
-		}
-		if limit > 0 && len(products) >= limit {
-			break
-		}
-	}
-
-	return products, nil
-}
-
-// GetSpotlightBonusProducts retrieves featured/highlighted bonus products.
-// These are typically the best or most promoted deals of the week.
-func (c *Client) GetSpotlightBonusProducts(ctx context.Context) ([]Product, error) {
-	params := url.Values{}
-	params.Set("application", "AHWEBSHOP")
-	params.Set("date", time.Now().Format("2006-01-02"))
-
-	path := "/mobile-services/bonuspage/v2/section/spotlight?" + params.Encode()
-
-	var result bonusSectionResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
-		return nil, fmt.Errorf("get spotlight bonus products failed: %w", err)
-	}
-
-	var products []Product
-	for _, item := range result.BonusGroupOrProducts {
-		if item.Product != nil {
-			products = append(products, item.Product.toProduct())
-		}
-		if item.BonusGroup != nil {
-			for _, p := range item.BonusGroup.Products {
-				products = append(products, p.toProduct())
-			}
-		}
 	}
 
 	return products, nil

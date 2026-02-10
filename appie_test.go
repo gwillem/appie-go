@@ -39,11 +39,11 @@ func TestNewWithConfig(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if client.AccessToken() != "test-token" {
-		t.Errorf("expected access token 'test-token', got '%s'", client.AccessToken())
+	if client.accessToken != "test-token" {
+		t.Errorf("expected access token 'test-token', got '%s'", client.accessToken)
 	}
-	if client.refreshTokenValue() != "test-refresh" {
-		t.Errorf("expected refresh token 'test-refresh', got '%s'", client.refreshTokenValue())
+	if client.refreshToken != "test-refresh" {
+		t.Errorf("expected refresh token 'test-refresh', got '%s'", client.refreshToken)
 	}
 }
 
@@ -134,8 +134,8 @@ func TestAutoRefreshOnExpiredToken(t *testing.T) {
 	if !refreshCalled {
 		t.Error("expected refresh to be called for expired token")
 	}
-	if client.AccessToken() != "new-access" {
-		t.Errorf("expected access token 'new-access', got '%s'", client.AccessToken())
+	if client.accessToken != "new-access" {
+		t.Errorf("expected access token 'new-access', got '%s'", client.accessToken)
 	}
 }
 
@@ -167,8 +167,8 @@ func TestNoAutoRefreshForAuthEndpoints(t *testing.T) {
 	if refreshCount != 1 {
 		t.Errorf("expected refresh to be called exactly once, got %d", refreshCount)
 	}
-	if client.AccessToken() != "new-access" {
-		t.Errorf("expected 'new-access', got '%s'", client.AccessToken())
+	if client.accessToken != "new-access" {
+		t.Errorf("expected 'new-access', got '%s'", client.accessToken)
 	}
 }
 
@@ -195,6 +195,160 @@ func TestNoAutoRefreshWhenNotExpired(t *testing.T) {
 
 	if refreshCalled {
 		t.Error("refresh should not be called when token is not expired")
+	}
+}
+
+func TestGetBonusGroupProductsMock(t *testing.T) {
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		switch {
+		case r.URL.Path == "/mobile-services/bonuspage/v3/metadata":
+			json.NewEncoder(w).Encode(bonusMetadataResponse{
+				Periods: []struct {
+					BonusStartDate string `json:"bonusStartDate"`
+					BonusEndDate   string `json:"bonusEndDate"`
+					Tabs           []struct {
+						Description     string `json:"description"`
+						URLMetadataList []struct {
+							URL         string `json:"url"`
+							Count       int    `json:"count"`
+							BonusType   string `json:"bonusType"`
+							Description string `json:"description"`
+						} `json:"urlMetadataList"`
+					} `json:"tabs"`
+				}{
+					{BonusStartDate: "2026-02-09", BonusEndDate: "2026-02-15"},
+				},
+			})
+		case r.URL.Path == "/graphql":
+			json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"bonusPromotions": []map[string]any{
+						{
+							"id":           "764081",
+							"title":        "Alle Hak*",
+							"productCount": 2,
+							"products": []map[string]any{
+								{
+									"id":            189671,
+									"title":         "Hak Appelmoes extra kwaliteit",
+									"brand":         "Hak",
+									"category":      "Soepen, sauzen/Appelmoes",
+									"salesUnitSize": "355 g",
+									"icons":         []string{"NUTRISCORE_A"},
+									"availability":  map[string]any{"isOrderable": true},
+									"priceV2": map[string]any{
+										"now": map[string]any{"amount": 2.19},
+										"was": map[string]any{"amount": 2.19},
+										"promotionLabel": map[string]any{
+											"tiers": []map[string]any{
+												{"mechanism": "X_PLUS_Y_FREE", "description": "1+1 gratis"},
+											},
+										},
+									},
+									"imagePack": []map[string]any{
+										{"large": map[string]any{"url": "https://example.com/hak.jpg", "width": 800, "height": 800}},
+									},
+								},
+								{
+									"id":            456789,
+									"title":         "Hak Bonensalade",
+									"brand":         "Hak",
+									"category":      "Groente/Bonen",
+									"salesUnitSize": "370 ml",
+									"icons":         []string{"NUTRISCORE_B", "VEGETARIAN"},
+									"availability":  map[string]any{"isOrderable": true},
+									"priceV2": map[string]any{
+										"now": map[string]any{"amount": 1.99},
+										"was": map[string]any{"amount": 2.49},
+									},
+									"imagePack": []map[string]any{},
+								},
+							},
+						},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	ctx := context.Background()
+
+	products, err := client.GetBonusGroupProducts(ctx, "764081")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(products) != 2 {
+		t.Fatalf("expected 2 products, got %d", len(products))
+	}
+
+	// Verify first product
+	p := products[0]
+	if p.ID != 189671 {
+		t.Errorf("expected ID 189671, got %d", p.ID)
+	}
+	if p.Title != "Hak Appelmoes extra kwaliteit" {
+		t.Errorf("expected title 'Hak Appelmoes extra kwaliteit', got %q", p.Title)
+	}
+	if p.Brand != "Hak" {
+		t.Errorf("expected brand 'Hak', got %q", p.Brand)
+	}
+	if p.NutriScore != "A" {
+		t.Errorf("expected NutriScore 'A', got %q", p.NutriScore)
+	}
+	if p.BonusMechanism != "1+1 gratis" {
+		t.Errorf("expected BonusMechanism '1+1 gratis', got %q", p.BonusMechanism)
+	}
+	if !p.IsBonus {
+		t.Error("expected IsBonus true")
+	}
+	if !p.IsOrderable {
+		t.Error("expected IsOrderable true")
+	}
+	if p.Price.Now != 2.19 {
+		t.Errorf("expected price 2.19, got %.2f", p.Price.Now)
+	}
+	if len(p.Images) != 1 {
+		t.Errorf("expected 1 image, got %d", len(p.Images))
+	}
+
+	// Verify second product (no promotion label, no images)
+	p2 := products[1]
+	if p2.ID != 456789 {
+		t.Errorf("expected ID 456789, got %d", p2.ID)
+	}
+	if p2.BonusMechanism != "" {
+		t.Errorf("expected empty BonusMechanism, got %q", p2.BonusMechanism)
+	}
+	if p2.Price.Was != 2.49 {
+		t.Errorf("expected was price 2.49, got %.2f", p2.Price.Was)
+	}
+
+	// Should have made 2 calls: metadata + graphql
+	if callCount != 2 {
+		t.Errorf("expected 2 API calls, got %d", callCount)
+	}
+}
+
+func TestBonusGroupToProductHasSegmentID(t *testing.T) {
+	bg := &bonusGroupResponse{
+		ID:                  "764081",
+		SegmentDescription:  "Alle Hak*",
+		DiscountDescription: "1+1 GRATIS",
+		Category:            "Groente, aardappelen",
+	}
+	p := bg.toProduct()
+	if p.BonusSegmentID != "764081" {
+		t.Errorf("expected BonusSegmentID '764081', got %q", p.BonusSegmentID)
+	}
+	if p.ID != 0 {
+		t.Errorf("expected ID 0 for bonus group, got %d", p.ID)
 	}
 }
 

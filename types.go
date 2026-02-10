@@ -68,6 +68,10 @@ type Product struct {
 	UnitPriceDescription string `json:"unitPriceDescription,omitempty"`
 	// PropertyIcons contains icons like "vegan", "bio", etc.
 	PropertyIcons []string `json:"propertyIcons,omitempty"`
+	// BonusSegmentID is the promotion segment ID for bonus group entries.
+	// Non-empty only for group-level bonus items (e.g., "Alle Hak*") that
+	// have ID==0. Use GetBonusGroupProducts to resolve to individual products.
+	BonusSegmentID string `json:"bonusSegmentId,omitempty"`
 }
 
 // Price represents product pricing in EUR.

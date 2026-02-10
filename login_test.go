@@ -60,14 +60,14 @@ func TestLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if client.AccessToken() != "test-access" {
-		t.Errorf("expected 'test-access', got '%s'", client.AccessToken())
+	if client.accessToken != "test-access" {
+		t.Errorf("expected 'test-access', got '%s'", client.accessToken)
 	}
-	if client.refreshTokenValue() != "test-refresh" {
-		t.Errorf("expected 'test-refresh', got '%s'", client.refreshTokenValue())
+	if client.refreshToken != "test-refresh" {
+		t.Errorf("expected 'test-refresh', got '%s'", client.refreshToken)
 	}
-	if client.MemberID() != "member-123" {
-		t.Errorf("expected 'member-123', got '%s'", client.MemberID())
+	if client.memberID != "member-123" {
+		t.Errorf("expected 'member-123', got '%s'", client.memberID)
 	}
 }
 

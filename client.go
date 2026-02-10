@@ -156,30 +156,11 @@ func (c *Client) saveConfig() error {
 	return os.WriteFile(c.configPath, data, 0600)
 }
 
-// AccessToken returns the current access token.
-func (c *Client) AccessToken() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.accessToken
-}
-
-// refreshTokenValue returns the current refresh token.
-func (c *Client) refreshTokenValue() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.refreshToken
-}
-
-// MemberID returns the current member ID.
-func (c *Client) MemberID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.memberID
-}
-
 // IsAuthenticated returns true if the client has an access token.
 func (c *Client) IsAuthenticated() bool {
-	return c.AccessToken() != ""
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.accessToken != ""
 }
 
 // setHeaders sets the common headers for API requests.

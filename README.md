@@ -121,17 +121,9 @@ client := appie.New(
 
 ## Command-Line Tools
 
-The repository includes several CLI tools in `cmd/`:
-
 ```bash
 # Login and save credentials
 go run ./cmd/login
-
-# Dump member profile data
-go run ./cmd/dump-member
-
-# Dump GraphQL schema
-go run ./cmd/dump-graphql
 ```
 
 ## Notes
@@ -139,7 +131,8 @@ go run ./cmd/dump-graphql
 - Tokens expire after ~7 days. Expired tokens are automatically refreshed when using `NewWithConfig()`.
 - The API uses both REST and GraphQL endpoints internally.
 - Anonymous tokens work for product browsing but not for orders or member data.
-- Rate limiting may apply; implement backoff for production use.
+- Rate limiting may apply. AH does not send back-off headers, so the practical rate limit is unknown.
+- **Server-side state:** Albert Heijn maintains an "active order" on the server, which determines the delivery date context for bonus promo visibility. When you call `ReopenOrder`, that order becomes the active one. Always call `RevertOrder` when done to avoid the account being stuck in a future order with incorrect bonus promos.
 
 ## License
 

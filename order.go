@@ -214,6 +214,42 @@ func (c *Client) ReopenOrder(ctx context.Context, orderID int) error {
 	return nil
 }
 
+const revertOrderMutation = `mutation OrderRevert($id: Int!) {
+  orderRevert(id: $id) {
+    status
+    errorMessage
+  }
+}`
+
+// RevertOrder reverts a reopened order back to its submitted state.
+// Use this after ReopenOrder to deactivate the order as the active one.
+func (c *Client) RevertOrder(ctx context.Context, orderID int) error {
+	type revertResponse struct {
+		OrderRevert struct {
+			Status       string `json:"status"`
+			ErrorMessage string `json:"errorMessage"`
+		} `json:"orderRevert"`
+	}
+
+	var resp revertResponse
+	vars := map[string]any{"id": orderID}
+	if err := c.doGraphQL(ctx, revertOrderMutation, vars, &resp); err != nil {
+		return fmt.Errorf("revert order failed: %w", err)
+	}
+
+	if resp.OrderRevert.Status != "SUCCESS" {
+		return fmt.Errorf("revert order failed: %s", resp.OrderRevert.ErrorMessage)
+	}
+
+	// Clear client-side order state
+	c.mu.Lock()
+	c.orderID = ""
+	c.orderHash = ""
+	c.mu.Unlock()
+
+	return nil
+}
+
 const fulfillmentsQuery = `query OrderFulfillments {
   orderFulfillments(status: OPEN) {
     result {

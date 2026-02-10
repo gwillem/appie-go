@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -61,6 +63,7 @@ func (bg *bonusGroupResponse) toProduct() Product {
 		Category:       bg.Category,
 		BonusMechanism: bg.DiscountDescription,
 		IsBonus:        true,
+		BonusSegmentID: bg.ID,
 		Price: Price{
 			Now: bg.ExampleForPrice,
 			Was: bg.ExampleFromPrice,
@@ -154,6 +157,196 @@ func (c *Client) GetSpotlightBonusProducts(ctx context.Context) ([]Product, erro
 	}
 
 	return collectBonusProducts(result), nil
+}
+
+// GraphQL query for fetching products within a bonus group/promotion segment.
+const fetchBonusGroupProductsQuery = `query FetchBonusPromotionWithProducts(
+  $id: String,
+  $periodStart: String,
+  $periodEnd: String,
+  $filterUnavailableProducts: Boolean,
+  $forcePromotionVisibility: Boolean = true,
+  $showAllPromotionSegments: Boolean = true
+) {
+  bonusPromotions(
+    input: {
+      id: $id
+      periodStart: $periodStart
+      periodEnd: $periodEnd
+      filterUnavailableProducts: $filterUnavailableProducts
+      forcePromotionVisibility: $forcePromotionVisibility
+      showAllPromotionSegments: $showAllPromotionSegments
+    }
+  ) {
+    id
+    title
+    productCount
+    products {
+      id
+      title
+      brand
+      category
+      salesUnitSize
+      icons
+      availability { isOrderable }
+      priceV2(
+        periodStart: $periodStart
+        periodEnd: $periodEnd
+        filterUnavailableProducts: $filterUnavailableProducts
+        forcePromotionVisibility: true
+      ) {
+        now { amount }
+        was { amount }
+        promotionLabel {
+          tiers {
+            mechanism
+            description
+          }
+        }
+      }
+      imagePack {
+        large { url width height }
+      }
+    }
+  }
+}`
+
+type bonusGroupProductsResponse struct {
+	BonusPromotions []struct {
+		ID           string                `json:"id"`
+		Title        string                `json:"title"`
+		ProductCount int                   `json:"productCount"`
+		Products     []bonusGraphQLProduct `json:"products"`
+	} `json:"bonusPromotions"`
+}
+
+type bonusGraphQLProduct struct {
+	ID            int      `json:"id"`
+	Title         string   `json:"title"`
+	Brand         string   `json:"brand"`
+	Category      string   `json:"category"`
+	SalesUnitSize string   `json:"salesUnitSize"`
+	Icons         []string `json:"icons"`
+	Availability  struct {
+		IsOrderable bool `json:"isOrderable"`
+	} `json:"availability"`
+	PriceV2 struct {
+		Now struct {
+			Amount float64 `json:"amount"`
+		} `json:"now"`
+		Was struct {
+			Amount float64 `json:"amount"`
+		} `json:"was"`
+		PromotionLabel *struct {
+			Tiers []struct {
+				Mechanism   string `json:"mechanism"`
+				Description string `json:"description"`
+			} `json:"tiers"`
+		} `json:"promotionLabel"`
+	} `json:"priceV2"`
+	ImagePack []struct {
+		Large *struct {
+			URL    string `json:"url"`
+			Width  int    `json:"width"`
+			Height int    `json:"height"`
+		} `json:"large"`
+	} `json:"imagePack"`
+}
+
+func (p *bonusGraphQLProduct) toProduct() Product {
+	var images []Image
+	for _, pack := range p.ImagePack {
+		if pack.Large != nil {
+			images = append(images, Image{
+				URL:    pack.Large.URL,
+				Width:  pack.Large.Width,
+				Height: pack.Large.Height,
+			})
+		}
+	}
+
+	var nutriScore string
+	for _, icon := range p.Icons {
+		if score, ok := strings.CutPrefix(icon, "NUTRISCORE_"); ok {
+			nutriScore = score
+			break
+		}
+	}
+
+	var bonusMechanism string
+	if p.PriceV2.PromotionLabel != nil && len(p.PriceV2.PromotionLabel.Tiers) > 0 {
+		bonusMechanism = p.PriceV2.PromotionLabel.Tiers[0].Description
+	}
+
+	return Product{
+		ID:             p.ID,
+		WebshopID:      strconv.Itoa(p.ID),
+		Title:          p.Title,
+		Brand:          p.Brand,
+		Category:       p.Category,
+		Price:          Price{Now: p.PriceV2.Now.Amount, Was: p.PriceV2.Was.Amount},
+		Images:         images,
+		NutriScore:     nutriScore,
+		IsBonus:        true,
+		BonusMechanism: bonusMechanism,
+		IsOrderable:    p.Availability.IsOrderable,
+		IsAvailable:    p.Availability.IsOrderable,
+		UnitSize:       p.SalesUnitSize,
+	}
+}
+
+// getBonusPeriod retrieves the current bonus period dates from metadata.
+func (c *Client) getBonusPeriod(ctx context.Context) (startDate, endDate string, err error) {
+	path := "/mobile-services/bonuspage/v3/metadata"
+	var result bonusMetadataResponse
+	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+		return "", "", fmt.Errorf("get bonus period failed: %w", err)
+	}
+	if len(result.Periods) == 0 {
+		return "", "", fmt.Errorf("no bonus periods available")
+	}
+	p := result.Periods[0]
+	return p.BonusStartDate, p.BonusEndDate, nil
+}
+
+// GetBonusGroupProducts retrieves the individual products within a bonus
+// promotion group. Use this to resolve group-level promotions (e.g.,
+// "Alle Hak*") that appear in GetBonusProducts/GetSpotlightBonusProducts
+// with ID==0 and a BonusSegmentID.
+//
+// The segmentID is the bonus group identifier, available as BonusSegmentID
+// on Product entries returned by GetBonusProducts.
+func (c *Client) GetBonusGroupProducts(ctx context.Context, segmentID string) ([]Product, error) {
+	startDate, endDate, err := c.getBonusPeriod(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	variables := map[string]any{
+		"id":                        segmentID,
+		"periodStart":               startDate,
+		"periodEnd":                 endDate,
+		"filterUnavailableProducts": true,
+		"forcePromotionVisibility":  true,
+		"showAllPromotionSegments":  true,
+	}
+
+	var resp bonusGroupProductsResponse
+	if err := c.doGraphQL(ctx, fetchBonusGroupProductsQuery, variables, &resp); err != nil {
+		return nil, fmt.Errorf("get bonus group products failed: %w", err)
+	}
+
+	if len(resp.BonusPromotions) == 0 {
+		return nil, nil
+	}
+
+	promo := resp.BonusPromotions[0]
+	products := make([]Product, 0, len(promo.Products))
+	for _, p := range promo.Products {
+		products = append(products, p.toProduct())
+	}
+
+	return products, nil
 }
 
 // collectBonusProducts extracts products from a bonus section response.

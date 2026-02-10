@@ -180,13 +180,6 @@ type Address struct {
 	CountryCode      string `json:"countryCode,omitempty"` // e.g., "NL"
 }
 
-// SearchResult represents the result of a product search with pagination.
-type SearchResult struct {
-	Products   []Product `json:"products"`
-	TotalCount int       `json:"totalCount"`
-	Page       int       `json:"page"`
-	PageSize   int       `json:"pageSize"`
-}
 
 // Fulfillment represents a scheduled order with delivery information.
 // A fulfillment is an order that has been submitted for delivery.

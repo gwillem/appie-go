@@ -93,7 +93,10 @@ func rewriteLoginResponse(resp *http.Response, localOrigin, targetHost string) e
 	// Intercept server-side redirects to appie://
 	loc := resp.Header.Get("Location")
 	if strings.HasPrefix(loc, "appie://") {
-		u, _ := url.Parse(loc)
+		u, err := url.Parse(loc)
+		if err != nil {
+			return fmt.Errorf("failed to parse appie URL %q: %w", loc, err)
+		}
 		resp.Header.Set("Location", fmt.Sprintf("%s/callback?%s", localOrigin, u.Query().Encode()))
 		return nil
 	}

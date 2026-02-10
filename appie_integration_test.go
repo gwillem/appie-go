@@ -155,15 +155,4 @@ func TestGetMember(t *testing.T) {
 	t.Logf("Member: %s %s (%s)", member.FirstName, member.LastName, member.Email)
 }
 
-func TestGetBonusCard(t *testing.T) {
-	client := testClient(t)
-	ctx := context.Background()
-
-	card, err := client.GetBonusCard(ctx)
-	if err != nil {
-		t.Fatalf("failed to get bonus card: %v", err)
-	}
-
-	t.Logf("Bonus card: %s (active: %v)", card.CardNumber, card.IsActive)
-}
 

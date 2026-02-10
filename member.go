@@ -105,16 +105,3 @@ func (c *Client) GetMember(ctx context.Context) (*Member, error) {
 	}, nil
 }
 
-// GetBonusCard retrieves the AH Bonuskaart (loyalty card) information.
-// Returns the 13-digit card number and whether a card is linked to the account.
-func (c *Client) GetBonusCard(ctx context.Context) (*BonusCard, error) {
-	var resp memberResponse
-	if err := c.doGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {
-		return nil, fmt.Errorf("get bonus card failed: %w", err)
-	}
-
-	return &BonusCard{
-		CardNumber: resp.Member.Cards.Bonus,
-		IsActive:   resp.Member.Cards.Bonus != "",
-	}, nil
-}

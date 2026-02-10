@@ -180,14 +180,6 @@ type Address struct {
 	CountryCode      string `json:"countryCode,omitempty"` // e.g., "NL"
 }
 
-// BonusCard represents the AH Bonuskaart (loyalty card) information.
-type BonusCard struct {
-	// CardNumber is the 13-digit bonus card number.
-	CardNumber string `json:"cardNumber"`
-	// IsActive indicates if a bonus card is linked to the account.
-	IsActive bool `json:"isActive"`
-}
-
 // SearchResult represents the result of a product search with pagination.
 type SearchResult struct {
 	Products   []Product `json:"products"`

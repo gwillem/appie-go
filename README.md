@@ -50,23 +50,25 @@ func main() {
 
 ### Authenticated Access
 
-For orders, shopping lists, and member data, you need to authenticate.
-Use the login tool to obtain and save tokens:
+For orders, shopping lists, and member data, use `Login()` which handles the
+full browser-based OAuth flow automatically:
 
-```bash
-go run ./cmd/login
+```go
+client := appie.New(appie.WithConfigPath(".appie.json"))
+ctx := context.Background()
+
+if err := client.Login(ctx); err != nil {
+    log.Fatal(err)
+}
+// Tokens are auto-saved when configPath is set
 ```
 
-Then load from saved config:
+Or load previously saved tokens:
 
 ```go
 client, err := appie.NewWithConfig(".appie.json")
 if err != nil {
     log.Fatal(err)
-}
-
-if !client.IsAuthenticated() {
-    // Need to login first
 }
 ```
 

@@ -83,7 +83,7 @@ func (c *Client) Login(ctx context.Context) error {
 
 	select {
 	case code := <-codeCh:
-		return c.ExchangeCode(ctx, code)
+		return c.exchangeCode(ctx, code)
 	case <-ctx.Done():
 		return ctx.Err()
 	}

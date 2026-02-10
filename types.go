@@ -2,22 +2,16 @@ package appie
 
 import "time"
 
-// Token represents the authentication tokens returned by the API.
-// These tokens are used for API authorization and should be stored securely.
-type Token struct {
-	// AccessToken is the bearer token used for API requests.
-	AccessToken string `json:"access_token"`
-	// RefreshToken is used to obtain a new access token when it expires.
+// token represents the authentication tokens returned by the API.
+type token struct {
+	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
-	// MemberID is the authenticated user's member ID.
-	MemberID string `json:"member_id,omitempty"`
-	// ExpiresIn is the token lifetime in seconds (typically ~7 days).
-	ExpiresIn int `json:"expires_in"`
+	MemberID     string `json:"member_id,omitempty"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
-// Config holds the client configuration stored in .appie.json.
-// This is used for persisting authentication state across sessions.
-type Config struct {
+// config holds the client configuration stored in .appie.json.
+type config struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	MemberID     string    `json:"member_id,omitempty"`
@@ -160,12 +154,20 @@ type ListItem struct {
 	Product *Product `json:"product,omitempty"`
 }
 
-// Member represents basic member profile information.
+// Member represents the member profile including address,
+// loyalty cards, and customer segmentation data.
 type Member struct {
-	ID        string `json:"id"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
-	Email     string `json:"email"`
+	ID              string   `json:"id"`
+	FirstName       string   `json:"firstName"`
+	LastName        string   `json:"lastName"`
+	Email           string   `json:"email"`
+	Gender          string   `json:"gender,omitempty"`          // "MALE", "FEMALE", or empty
+	DateOfBirth     string   `json:"dateOfBirth,omitempty"`     // Format: "YYYY-MM-DD"
+	PhoneNumber     string   `json:"phoneNumber,omitempty"`     // Dutch format with country code
+	Address         Address  `json:"address,omitempty"`
+	BonusCardNumber string   `json:"bonusCardNumber,omitempty"` // 13-digit card number
+	GallCardNumber  string   `json:"gallCardNumber,omitempty"`  // Gall & Gall card
+	Audiences       []string `json:"audiences,omitempty"`       // Customer segments
 }
 
 // Address represents a Dutch postal address.
@@ -176,22 +178,6 @@ type Address struct {
 	PostalCode       string `json:"postalCode"`                 // Dutch format: "1234AB"
 	City             string `json:"city"`
 	CountryCode      string `json:"countryCode,omitempty"` // e.g., "NL"
-}
-
-// MemberFull represents the complete member profile including address,
-// loyalty cards, and customer segmentation data.
-type MemberFull struct {
-	ID              string   `json:"id"`
-	FirstName       string   `json:"firstName"`
-	LastName        string   `json:"lastName"`
-	Email           string   `json:"email"`
-	Gender          string   `json:"gender,omitempty"`      // "MALE", "FEMALE", or empty
-	DateOfBirth     string   `json:"dateOfBirth,omitempty"` // Format: "YYYY-MM-DD"
-	PhoneNumber     string   `json:"phoneNumber,omitempty"` // Dutch format with country code
-	Address         Address  `json:"address"`
-	BonusCardNumber string   `json:"bonusCardNumber,omitempty"` // 13-digit card number
-	GallCardNumber  string   `json:"gallCardNumber,omitempty"`  // Gall & Gall card
-	Audiences       []string `json:"audiences,omitempty"`       // Customer segments
 }
 
 // BonusCard represents the AH Bonuskaart (loyalty card) information.

@@ -18,19 +18,19 @@
 //
 // # Authentication
 //
-// For full access (orders, shopping lists, member profile), authenticate via
-// the browser-based OAuth flow:
+// For full access (orders, shopping lists, member profile), use Login which
+// handles the full browser-based OAuth flow automatically:
 //
-//	// 1. Open LoginURL() in browser
-//	// 2. User logs in and gets redirected to appie://login-exit?code=...
-//	// 3. Exchange code for tokens
-//	client.ExchangeCode(ctx, code)
+//	client := appie.New(appie.WithConfigPath(".appie.json"))
+//	if err := client.Login(ctx); err != nil {
+//		log.Fatal(err)
+//	}
+//	// Tokens are auto-saved when configPath is set
 //
 // # Configuration
 //
-// Use NewWithConfig to persist tokens across sessions:
+// Use NewWithConfig to load persisted tokens:
 //
 //	client, err := appie.NewWithConfig(".appie.json")
-//	// ... use client ...
-//	client.SaveConfig() // Save updated tokens
+//	// Expired tokens are refreshed automatically
 package appie

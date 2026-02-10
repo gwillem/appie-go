@@ -57,9 +57,8 @@ func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]Shoppin
 	return lists, nil
 }
 
-// GetShoppingList retrieves the first (default) favorite list.
-// Use GetShoppingLists if you need to access multiple lists.
-func (c *Client) GetShoppingList(ctx context.Context) (*ShoppingList, error) {
+// getShoppingList retrieves the first (default) favorite list.
+func (c *Client) getShoppingList(ctx context.Context) (*ShoppingList, error) {
 	lists, err := c.GetShoppingLists(ctx, 0)
 	if err != nil {
 		return nil, err
@@ -188,7 +187,7 @@ func (c *Client) CheckShoppingListItem(ctx context.Context, itemID string, check
 
 // ClearShoppingList removes all items from the shopping list.
 func (c *Client) ClearShoppingList(ctx context.Context) error {
-	list, err := c.GetShoppingList(ctx)
+	list, err := c.getShoppingList(ctx)
 	if err != nil {
 		return err
 	}
@@ -206,7 +205,7 @@ func (c *Client) ClearShoppingList(ctx context.Context) error {
 // Free-text items (without ProductID) are skipped. This is useful for quickly
 // converting your shopping list into an order.
 func (c *Client) ShoppingListToOrder(ctx context.Context) error {
-	list, err := c.GetShoppingList(ctx)
+	list, err := c.getShoppingList(ctx)
 	if err != nil {
 		return err
 	}

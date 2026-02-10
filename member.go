@@ -74,34 +74,16 @@ type memberResponse struct {
 	} `json:"member"`
 }
 
-// GetMember retrieves basic member profile information (name, email).
-// Use GetMemberFull for complete profile including address and cards.
+// GetMember retrieves the member profile including address,
+// loyalty cards (Bonus, Gall & Gall), and customer segmentation data.
 func (c *Client) GetMember(ctx context.Context) (*Member, error) {
 	var resp memberResponse
 	if err := c.doGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {
 		return nil, fmt.Errorf("get member failed: %w", err)
 	}
 
-	member := &Member{
-		ID:        strconv.Itoa(resp.Member.ID),
-		FirstName: resp.Member.Name.First,
-		LastName:  resp.Member.Name.Last,
-		Email:     resp.Member.EmailAddress,
-	}
-
-	return member, nil
-}
-
-// GetMemberFull retrieves the complete member profile including address,
-// loyalty cards (Bonus, Gall & Gall), and customer segmentation data.
-func (c *Client) GetMemberFull(ctx context.Context) (*MemberFull, error) {
-	var resp memberResponse
-	if err := c.doGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {
-		return nil, fmt.Errorf("get member failed: %w", err)
-	}
-
 	m := resp.Member
-	return &MemberFull{
+	return &Member{
 		ID:          strconv.Itoa(m.ID),
 		FirstName:   m.Name.First,
 		LastName:    m.Name.Last,

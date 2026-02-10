@@ -96,7 +96,7 @@ func New(opts ...Option) *Client {
 func NewWithConfig(configPath string) (*Client, error) {
 	c := New(WithConfigPath(configPath))
 
-	if err := c.LoadConfig(); err != nil {
+	if err := c.loadConfig(); err != nil {
 		if os.IsNotExist(err) {
 			return c, nil // Config doesn't exist yet, that's OK
 		}
@@ -106,8 +106,8 @@ func NewWithConfig(configPath string) (*Client, error) {
 	return c, nil
 }
 
-// LoadConfig loads the configuration from the config file.
-func (c *Client) LoadConfig() error {
+// loadConfig loads the configuration from the config file.
+func (c *Client) loadConfig() error {
 	if c.configPath == "" {
 		return fmt.Errorf("no config path set")
 	}
@@ -117,7 +117,7 @@ func (c *Client) LoadConfig() error {
 		return err
 	}
 
-	var cfg Config
+	var cfg config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
@@ -132,14 +132,14 @@ func (c *Client) LoadConfig() error {
 	return nil
 }
 
-// SaveConfig saves the current configuration to the config file.
-func (c *Client) SaveConfig() error {
+// saveConfig saves the current configuration to the config file.
+func (c *Client) saveConfig() error {
 	if c.configPath == "" {
 		return fmt.Errorf("no config path set")
 	}
 
 	c.mu.RLock()
-	cfg := Config{
+	cfg := config{
 		AccessToken:  c.accessToken,
 		RefreshToken: c.refreshToken,
 		MemberID:     c.memberID,
@@ -162,8 +162,8 @@ func (c *Client) AccessToken() string {
 	return c.accessToken
 }
 
-// RefreshTokenValue returns the current refresh token.
-func (c *Client) RefreshTokenValue() string {
+// refreshTokenValue returns the current refresh token.
+func (c *Client) refreshTokenValue() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.refreshToken
@@ -219,8 +219,8 @@ func (c *Client) ensureFreshToken(ctx context.Context, path string) {
 	if expired && hasRefresh {
 		// Best-effort refresh; if it fails, the original request will proceed
 		// with the expired token and the API will return an appropriate error.
-		if err := c.RefreshToken(ctx); err == nil {
-			_ = c.SaveConfig()
+		if err := c.refreshAccessToken(ctx); err == nil {
+			_ = c.saveConfig()
 		}
 	}
 }

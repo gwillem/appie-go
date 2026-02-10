@@ -42,8 +42,8 @@ func TestNewWithConfig(t *testing.T) {
 	if client.AccessToken() != "test-token" {
 		t.Errorf("expected access token 'test-token', got '%s'", client.AccessToken())
 	}
-	if client.RefreshTokenValue() != "test-refresh" {
-		t.Errorf("expected refresh token 'test-refresh', got '%s'", client.RefreshTokenValue())
+	if client.refreshTokenValue() != "test-refresh" {
+		t.Errorf("expected refresh token 'test-refresh', got '%s'", client.refreshTokenValue())
 	}
 }
 
@@ -59,7 +59,7 @@ func TestNewWithConfigMissing(t *testing.T) {
 
 func TestLoginURL(t *testing.T) {
 	client := New()
-	url := client.LoginURL()
+	url := client.loginURL()
 	expected := "https://login.ah.nl/login?client_id=appie-ios&response_type=code&redirect_uri=appie://login-exit"
 	if url != expected {
 		t.Errorf("expected %s, got %s", expected, url)
@@ -79,12 +79,12 @@ func TestConfigExpiresAtRoundTrip(t *testing.T) {
 	client.expiresAt = time.Now().Add(24 * time.Hour).Truncate(time.Second)
 	client.mu.Unlock()
 
-	if err := client.SaveConfig(); err != nil {
+	if err := client.saveConfig(); err != nil {
 		t.Fatal(err)
 	}
 
 	client2 := New(WithConfigPath(tmpFile.Name()))
-	if err := client2.LoadConfig(); err != nil {
+	if err := client2.loadConfig(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,7 +107,7 @@ func TestAutoRefreshOnExpiredToken(t *testing.T) {
 		switch r.URL.Path {
 		case "/mobile-auth/v1/auth/token/refresh":
 			refreshCalled = true
-			json.NewEncoder(w).Encode(Token{
+			json.NewEncoder(w).Encode(token{
 				AccessToken:  "new-access",
 				RefreshToken: "new-refresh",
 				ExpiresIn:    86400,
@@ -144,7 +144,7 @@ func TestNoAutoRefreshForAuthEndpoints(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/mobile-auth/v1/auth/token/refresh" {
 			refreshCount++
-			json.NewEncoder(w).Encode(Token{
+			json.NewEncoder(w).Encode(token{
 				AccessToken:  "new-access",
 				RefreshToken: "new-refresh",
 				ExpiresIn:    86400,
@@ -159,8 +159,8 @@ func TestNoAutoRefreshForAuthEndpoints(t *testing.T) {
 	client.mu.Unlock()
 
 	ctx := context.Background()
-	// Calling RefreshToken directly should not trigger auto-refresh recursion
-	if err := client.RefreshToken(ctx); err != nil {
+	// Calling refreshAccessToken directly should not trigger auto-refresh recursion
+	if err := client.refreshAccessToken(ctx); err != nil {
 		t.Fatal(err)
 	}
 

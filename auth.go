@@ -11,39 +11,38 @@ const (
 	loginURLTemplate = "https://login.ah.nl/login?client_id=%s&response_type=code&redirect_uri=appie://login-exit"
 )
 
-// LoginURL returns the URL for browser-based login.
-// After login, the browser will redirect to appie://login-exit?code=...
-// Extract the code and pass it to ExchangeCode.
-func (c *Client) LoginURL() string {
+// loginURL returns the URL for browser-based login.
+func (c *Client) loginURL() string {
 	return fmt.Sprintf(loginURLTemplate, c.clientID)
 }
 
-// ExchangeCode exchanges an authorization code for tokens.
-func (c *Client) ExchangeCode(ctx context.Context, code string) error {
+// exchangeCode exchanges an authorization code for tokens.
+func (c *Client) exchangeCode(ctx context.Context, code string) error {
 	body := map[string]string{
 		"clientId": c.clientID,
 		"code":     code,
 	}
 
-	var token Token
-	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token", body, &token); err != nil {
+	var tok token
+	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token", body, &tok); err != nil {
 		return fmt.Errorf("failed to exchange code: %w", err)
 	}
 
 	c.mu.Lock()
-	c.accessToken = token.AccessToken
-	c.refreshToken = token.RefreshToken
-	c.memberID = token.MemberID
-	if token.ExpiresIn > 0 {
-		c.expiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	c.accessToken = tok.AccessToken
+	c.refreshToken = tok.RefreshToken
+	c.memberID = tok.MemberID
+	if tok.ExpiresIn > 0 {
+		c.expiresAt = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
 	}
 	c.mu.Unlock()
 
+	_ = c.saveConfig()
 	return nil
 }
 
-// RefreshToken refreshes the access token using the refresh token.
-func (c *Client) RefreshToken(ctx context.Context) error {
+// refreshAccessToken refreshes the access token using the refresh token.
+func (c *Client) refreshAccessToken(ctx context.Context) error {
 	c.mu.RLock()
 	rt := c.refreshToken
 	c.mu.RUnlock()
@@ -57,16 +56,16 @@ func (c *Client) RefreshToken(ctx context.Context) error {
 		"refreshToken": rt,
 	}
 
-	var token Token
-	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/refresh", body, &token); err != nil {
+	var tok token
+	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/refresh", body, &tok); err != nil {
 		return fmt.Errorf("failed to refresh token: %w", err)
 	}
 
 	c.mu.Lock()
-	c.accessToken = token.AccessToken
-	c.refreshToken = token.RefreshToken
-	if token.ExpiresIn > 0 {
-		c.expiresAt = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	c.accessToken = tok.AccessToken
+	c.refreshToken = tok.RefreshToken
+	if tok.ExpiresIn > 0 {
+		c.expiresAt = time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
 	}
 	c.mu.Unlock()
 
@@ -80,14 +79,14 @@ func (c *Client) GetAnonymousToken(ctx context.Context) error {
 		"clientId": c.clientID,
 	}
 
-	var token Token
-	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/anonymous", body, &token); err != nil {
+	var tok token
+	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/anonymous", body, &tok); err != nil {
 		return fmt.Errorf("failed to get anonymous token: %w", err)
 	}
 
 	c.mu.Lock()
-	c.accessToken = token.AccessToken
-	c.refreshToken = token.RefreshToken
+	c.accessToken = tok.AccessToken
+	c.refreshToken = tok.RefreshToken
 	c.mu.Unlock()
 
 	return nil

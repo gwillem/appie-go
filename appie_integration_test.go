@@ -43,7 +43,7 @@ func TestRefreshToken(t *testing.T) {
 
 	oldToken := client.AccessToken()
 
-	err := client.RefreshToken(ctx)
+	err := client.refreshAccessToken(ctx)
 	if err != nil {
 		t.Fatalf("failed to refresh token: %v", err)
 	}
@@ -57,12 +57,7 @@ func TestRefreshToken(t *testing.T) {
 		t.Log("warning: access token did not change after refresh")
 	}
 
-	// Save updated tokens
-	if client.configPath != "" {
-		if err := client.SaveConfig(); err != nil {
-			t.Logf("warning: failed to save config: %v", err)
-		}
-	}
+	// Tokens are auto-saved when configPath is set
 }
 
 func TestSearchProducts(t *testing.T) {
@@ -172,20 +167,3 @@ func TestGetBonusCard(t *testing.T) {
 	t.Logf("Bonus card: %s (active: %v)", card.CardNumber, card.IsActive)
 }
 
-func TestGetFeatureFlags(t *testing.T) {
-	client := testClient(t)
-	ctx := context.Background()
-
-	flags, err := client.GetFeatureFlags(ctx)
-	if err != nil {
-		t.Fatalf("failed to get feature flags: %v", err)
-	}
-
-	t.Logf("Feature flags: %d total", len(flags))
-
-	// Check some known flags
-	knownFlags := []string{"dark-mode", "ah-premium", "my-list", "push-notifications", "nutriscore"}
-	for _, flag := range knownFlags {
-		t.Logf("  %s: %d%% (enabled: %v)", flag, flags.Rollout(flag), flags.IsEnabled(flag))
-	}
-}

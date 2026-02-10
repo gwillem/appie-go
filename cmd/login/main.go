@@ -35,10 +35,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := client.SaveConfig(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to save config: %v\n", err)
-		os.Exit(1)
-	}
-
 	fmt.Printf("Login successful! Tokens saved to %s\n", configPath)
 }

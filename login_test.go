@@ -16,7 +16,7 @@ func TestLogin(t *testing.T) {
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/mobile-auth/v1/auth/token":
-			json.NewEncoder(w).Encode(Token{
+			json.NewEncoder(w).Encode(token{
 				AccessToken:  "test-access",
 				RefreshToken: "test-refresh",
 				MemberID:     "member-123",
@@ -63,8 +63,8 @@ func TestLogin(t *testing.T) {
 	if client.AccessToken() != "test-access" {
 		t.Errorf("expected 'test-access', got '%s'", client.AccessToken())
 	}
-	if client.RefreshTokenValue() != "test-refresh" {
-		t.Errorf("expected 'test-refresh', got '%s'", client.RefreshTokenValue())
+	if client.refreshTokenValue() != "test-refresh" {
+		t.Errorf("expected 'test-refresh', got '%s'", client.refreshTokenValue())
 	}
 	if client.MemberID() != "member-123" {
 		t.Errorf("expected 'member-123', got '%s'", client.MemberID())

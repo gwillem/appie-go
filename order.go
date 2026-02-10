@@ -158,13 +158,16 @@ func (c *Client) ClearOrder(ctx context.Context) error {
 		return err
 	}
 
-	for _, item := range order.Items {
-		if err := c.RemoveFromOrder(ctx, item.ProductID); err != nil {
-			return fmt.Errorf("failed to remove item %d: %w", item.ProductID, err)
-		}
+	if len(order.Items) == 0 {
+		return nil
 	}
 
-	return nil
+	removals := make([]OrderItem, 0, len(order.Items))
+	for _, item := range order.Items {
+		removals = append(removals, OrderItem{ProductID: item.ProductID, Quantity: 0})
+	}
+
+	return c.AddToOrder(ctx, removals)
 }
 
 // GetOrderSummary retrieves the order summary/totals.

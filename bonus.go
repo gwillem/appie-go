@@ -128,7 +128,7 @@ func (c *Client) GetBonusProducts(ctx context.Context) ([]Product, error) {
 		}
 
 		for _, p := range catProducts {
-			key := p.Title
+			key := fmt.Sprintf("%d:%s", p.ID, p.Title)
 			if !seen[key] {
 				seen[key] = true
 				products = append(products, p)

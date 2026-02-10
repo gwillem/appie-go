@@ -70,7 +70,7 @@ func (c *Client) Login(ctx context.Context) error {
 
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(listener)
-	defer srv.Shutdown(context.Background())
+	defer srv.Shutdown(ctx)
 
 	loginURL := fmt.Sprintf("%s/login?client_id=%s&response_type=code&redirect_uri=appie://login-exit",
 		localOrigin, c.clientID)

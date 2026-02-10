@@ -7,8 +7,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"cmp"
 	"os"
-	"sort"
+	"slices"
 
 	appie "github.com/gwillem/appie-go"
 )
@@ -161,8 +162,8 @@ func main() {
 			continue
 		}
 
-		sort.Slice(types, func(i, j int) bool {
-			return types[i].Name < types[j].Name
+		slices.SortFunc(types, func(a, b gqlType) int {
+			return cmp.Compare(a.Name, b.Name)
 		})
 
 		fmt.Printf("## %s Types (%d)\n\n", kind, len(types))

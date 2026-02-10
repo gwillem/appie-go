@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -207,7 +208,7 @@ func (c *Client) setHeaders(req *http.Request) {
 // Auth endpoints are excluded to avoid infinite loops.
 func (c *Client) ensureFreshToken(ctx context.Context, path string) {
 	// Don't auto-refresh for auth endpoints
-	if len(path) >= len("/mobile-auth/") && path[:len("/mobile-auth/")] == "/mobile-auth/" {
+	if strings.HasPrefix(path, "/mobile-auth/") {
 		return
 	}
 

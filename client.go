@@ -207,8 +207,8 @@ func (c *Client) ensureFreshToken(ctx context.Context, path string) {
 	}
 }
 
-// doRequest performs an HTTP request and decodes the response.
-func (c *Client) doRequest(ctx context.Context, method, path string, body, result any) error {
+// DoRequest performs an HTTP request and decodes the response.
+func (c *Client) DoRequest(ctx context.Context, method, path string, body, result any) error {
 	c.ensureFreshToken(ctx, path)
 
 	var bodyReader io.Reader
@@ -254,15 +254,15 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body, resul
 	return nil
 }
 
-// doGraphQL performs a GraphQL request.
-func (c *Client) doGraphQL(ctx context.Context, query string, variables map[string]any, result any) error {
+// DoGraphQL performs a GraphQL request.
+func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[string]any, result any) error {
 	req := graphQLRequest{
 		Query:     query,
 		Variables: variables,
 	}
 
 	var resp graphQLResponse[json.RawMessage]
-	if err := c.doRequest(ctx, http.MethodPost, "/graphql", req, &resp); err != nil {
+	if err := c.DoRequest(ctx, http.MethodPost, "/graphql", req, &resp); err != nil {
 		return err
 	}
 

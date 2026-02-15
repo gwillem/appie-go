@@ -133,7 +133,7 @@ func (c *Client) SearchProducts(ctx context.Context, query string, limit int) ([
 	path := "/mobile-services/product/search/v2?" + params.Encode()
 
 	var result searchResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("search products failed: %w", err)
 	}
 
@@ -155,7 +155,7 @@ func (c *Client) GetProduct(ctx context.Context, productID int) (*Product, error
 		ProductCard productResponse `json:"productCard"`
 	}
 
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get product failed: %w", err)
 	}
 
@@ -187,7 +187,7 @@ func (c *Client) fetchNutritionalInfo(ctx context.Context, productID int) ([]Nut
 	}
 
 	var resp productNutritionResponse
-	if err := c.doGraphQL(ctx, fetchProductNutritionQuery, variables, &resp); err != nil {
+	if err := c.DoGraphQL(ctx, fetchProductNutritionQuery, variables, &resp); err != nil {
 		return nil, err
 	}
 
@@ -227,7 +227,7 @@ func (c *Client) GetProductsByIDs(ctx context.Context, productIDs []int) ([]Prod
 	var result struct {
 		Products []productResponse `json:"products"`
 	}
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get products by ids failed: %w", err)
 	}
 

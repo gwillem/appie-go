@@ -24,7 +24,7 @@ func (c *Client) exchangeCode(ctx context.Context, code string) error {
 	}
 
 	var tok token
-	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token", body, &tok); err != nil {
+	if err := c.DoRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token", body, &tok); err != nil {
 		return fmt.Errorf("failed to exchange code: %w", err)
 	}
 
@@ -57,7 +57,7 @@ func (c *Client) refreshAccessToken(ctx context.Context) error {
 	}
 
 	var tok token
-	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/refresh", body, &tok); err != nil {
+	if err := c.DoRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/refresh", body, &tok); err != nil {
 		return fmt.Errorf("failed to refresh token: %w", err)
 	}
 
@@ -80,7 +80,7 @@ func (c *Client) GetAnonymousToken(ctx context.Context) error {
 	}
 
 	var tok token
-	if err := c.doRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/anonymous", body, &tok); err != nil {
+	if err := c.DoRequest(ctx, http.MethodPost, "/mobile-auth/v1/auth/token/anonymous", body, &tok); err != nil {
 		return fmt.Errorf("failed to get anonymous token: %w", err)
 	}
 

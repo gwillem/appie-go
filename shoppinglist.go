@@ -41,7 +41,7 @@ func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]Shoppin
 	path := fmt.Sprintf("/mobile-services/lists/v3/lists?productId=%d", productID)
 
 	var result []listResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get shopping lists failed: %w", err)
 	}
 
@@ -98,7 +98,7 @@ func (c *Client) AddToShoppingList(ctx context.Context, items []ListItem) error 
 		"items": v2Items,
 	}
 
-	if err := c.doRequest(ctx, http.MethodPatch, "/mobile-services/shoppinglist/v2/items", body, nil); err != nil {
+	if err := c.DoRequest(ctx, http.MethodPatch, "/mobile-services/shoppinglist/v2/items", body, nil); err != nil {
 		return fmt.Errorf("add to shopping list failed: %w", err)
 	}
 
@@ -149,7 +149,7 @@ func (c *Client) AddToFavoriteList(ctx context.Context, listID string, productID
 		} `json:"favoriteListProductsAddV2"`
 	}
 
-	if err := c.doGraphQL(ctx, mutation, variables, &result); err != nil {
+	if err := c.DoGraphQL(ctx, mutation, variables, &result); err != nil {
 		return fmt.Errorf("add to favorite list failed: %w", err)
 	}
 
@@ -163,7 +163,7 @@ func (c *Client) AddToFavoriteList(ctx context.Context, listID string, productID
 // RemoveFromShoppingList removes an item from the shopping list.
 func (c *Client) RemoveFromShoppingList(ctx context.Context, itemID string) error {
 	path := fmt.Sprintf("/mobile-services/lists/v3/lists/items/%s", itemID)
-	if err := c.doRequest(ctx, http.MethodDelete, path, nil, nil); err != nil {
+	if err := c.DoRequest(ctx, http.MethodDelete, path, nil, nil); err != nil {
 		return fmt.Errorf("remove from shopping list failed: %w", err)
 	}
 
@@ -178,7 +178,7 @@ func (c *Client) CheckShoppingListItem(ctx context.Context, itemID string, check
 	}
 
 	path := fmt.Sprintf("/mobile-services/lists/v3/lists/items/%s", itemID)
-	if err := c.doRequest(ctx, http.MethodPatch, path, body, nil); err != nil {
+	if err := c.DoRequest(ctx, http.MethodPatch, path, body, nil); err != nil {
 		return fmt.Errorf("check shopping list item failed: %w", err)
 	}
 

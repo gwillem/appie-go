@@ -75,7 +75,7 @@ func (r *orderSummaryResponse) toOrder() Order {
 // The order ID is cached for use in subsequent order operations.
 func (c *Client) GetOrder(ctx context.Context) (*Order, error) {
 	var result orderSummaryResponse
-	if err := c.doRequest(ctx, http.MethodGet, "/mobile-services/order/v1/summaries/active?sortBy=DEFAULT", nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, "/mobile-services/order/v1/summaries/active?sortBy=DEFAULT", nil, &result); err != nil {
 		return nil, fmt.Errorf("get order failed: %w", err)
 	}
 
@@ -134,7 +134,7 @@ func (c *Client) AddToOrder(ctx context.Context, items []OrderItem) error {
 		"items": reqItems,
 	}
 
-	if err := c.doRequest(ctx, http.MethodPut, "/mobile-services/order/v1/items?sortBy=DEFAULT", body, nil); err != nil {
+	if err := c.DoRequest(ctx, http.MethodPut, "/mobile-services/order/v1/items?sortBy=DEFAULT", body, nil); err != nil {
 		return fmt.Errorf("add to order failed: %w", err)
 	}
 
@@ -173,7 +173,7 @@ func (c *Client) ClearOrder(ctx context.Context) error {
 // GetOrderSummary retrieves the order summary/totals.
 func (c *Client) GetOrderSummary(ctx context.Context) (*OrderSummary, error) {
 	var result orderSummaryResponse
-	if err := c.doRequest(ctx, http.MethodGet, "/mobile-services/order/v1/summaries/active?sortBy=DEFAULT", nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, "/mobile-services/order/v1/summaries/active?sortBy=DEFAULT", nil, &result); err != nil {
 		return nil, fmt.Errorf("get order summary failed: %w", err)
 	}
 
@@ -203,7 +203,7 @@ func (c *Client) ReopenOrder(ctx context.Context, orderID int) error {
 
 	var resp reopenResponse
 	vars := map[string]any{"id": orderID}
-	if err := c.doGraphQL(ctx, reopenOrderMutation, vars, &resp); err != nil {
+	if err := c.DoGraphQL(ctx, reopenOrderMutation, vars, &resp); err != nil {
 		return fmt.Errorf("reopen order failed: %w", err)
 	}
 
@@ -233,7 +233,7 @@ func (c *Client) RevertOrder(ctx context.Context, orderID int) error {
 
 	var resp revertResponse
 	vars := map[string]any{"id": orderID}
-	if err := c.doGraphQL(ctx, revertOrderMutation, vars, &resp); err != nil {
+	if err := c.DoGraphQL(ctx, revertOrderMutation, vars, &resp); err != nil {
 		return fmt.Errorf("revert order failed: %w", err)
 	}
 
@@ -326,7 +326,7 @@ type fulfillmentResult struct {
 // These are orders that have been submitted and are awaiting delivery.
 func (c *Client) GetFulfillments(ctx context.Context) ([]Fulfillment, error) {
 	var resp fulfillmentsResponse
-	if err := c.doGraphQL(ctx, fulfillmentsQuery, nil, &resp); err != nil {
+	if err := c.DoGraphQL(ctx, fulfillmentsQuery, nil, &resp); err != nil {
 		return nil, fmt.Errorf("get fulfillments failed: %w", err)
 	}
 

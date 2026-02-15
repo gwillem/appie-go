@@ -77,7 +77,7 @@ func (c *Client) getBonusMetadata(ctx context.Context) ([]string, error) {
 	path := "/mobile-services/bonuspage/v3/metadata"
 
 	var result bonusMetadataResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get bonus metadata failed: %w", err)
 	}
 
@@ -105,7 +105,7 @@ func (c *Client) getBonusSection(ctx context.Context, category string) ([]Produc
 	path := "/mobile-services/bonuspage/v2/section?" + params.Encode()
 
 	var result bonusSectionResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get bonus products failed (category=%s): %w", category, err)
 	}
 
@@ -152,7 +152,7 @@ func (c *Client) GetSpotlightBonusProducts(ctx context.Context) ([]Product, erro
 	path := "/mobile-services/bonuspage/v2/section/spotlight?" + params.Encode()
 
 	var result bonusSectionResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get spotlight bonus products failed: %w", err)
 	}
 
@@ -299,7 +299,7 @@ func (p *bonusGraphQLProduct) toProduct() Product {
 func (c *Client) getBonusPeriod(ctx context.Context) (startDate, endDate string, err error) {
 	path := "/mobile-services/bonuspage/v3/metadata"
 	var result bonusMetadataResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return "", "", fmt.Errorf("get bonus period failed: %w", err)
 	}
 	if len(result.Periods) == 0 {
@@ -332,7 +332,7 @@ func (c *Client) GetBonusGroupProducts(ctx context.Context, segmentID string) ([
 	}
 
 	var resp bonusGroupProductsResponse
-	if err := c.doGraphQL(ctx, fetchBonusGroupProductsQuery, variables, &resp); err != nil {
+	if err := c.DoGraphQL(ctx, fetchBonusGroupProductsQuery, variables, &resp); err != nil {
 		return nil, fmt.Errorf("get bonus group products failed: %w", err)
 	}
 

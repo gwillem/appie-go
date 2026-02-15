@@ -127,7 +127,7 @@ func TestAutoRefreshOnExpiredToken(t *testing.T) {
 
 	ctx := context.Background()
 	var result map[string]string
-	if err := client.doRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result); err != nil {
+	if err := client.DoRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result); err != nil {
 		t.Fatal(err)
 	}
 
@@ -189,7 +189,7 @@ func TestNoAutoRefreshWhenNotExpired(t *testing.T) {
 
 	ctx := context.Background()
 	var result map[string]string
-	if err := client.doRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result); err != nil {
+	if err := client.DoRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result); err != nil {
 		t.Fatal(err)
 	}
 

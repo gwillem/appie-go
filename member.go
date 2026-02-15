@@ -78,7 +78,7 @@ type memberResponse struct {
 // loyalty cards (Bonus, Gall & Gall), and customer segmentation data.
 func (c *Client) GetMember(ctx context.Context) (*Member, error) {
 	var resp memberResponse
-	if err := c.doGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {
+	if err := c.DoGraphQL(ctx, fetchMemberQuery, nil, &resp); err != nil {
 		return nil, fmt.Errorf("get member failed: %w", err)
 	}
 

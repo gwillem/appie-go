@@ -40,7 +40,7 @@ type receiptItemDetail struct {
 // GetReceipts retrieves the list of in-store receipts (kassabonnen) for the authenticated user.
 func (c *Client) GetReceipts(ctx context.Context) ([]Receipt, error) {
 	var result receiptsResponse
-	if err := c.doRequest(ctx, http.MethodGet, "/mobile-services/v1/receipts", nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, "/mobile-services/v1/receipts", nil, &result); err != nil {
 		return nil, fmt.Errorf("get receipts failed: %w", err)
 	}
 
@@ -63,7 +63,7 @@ func (c *Client) GetReceipt(ctx context.Context, transactionID string) (*Receipt
 	path := fmt.Sprintf("/mobile-services/v2/receipts/%s", transactionID)
 
 	var result receiptDetailResponse
-	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get receipt failed: %w", err)
 	}
 

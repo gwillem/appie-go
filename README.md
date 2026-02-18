@@ -1,6 +1,6 @@
-# appie-go
+![appie gopher](doc/appie.png)
 
-<img src="doc/appie.png" align="right" alt="appie gopher">
+# appie-go
 
 Go client library for the Albert Heijn mobile API.
 

@@ -8,8 +8,6 @@ import (
 )
 
 func TestGetReceipts(t *testing.T) {
-	t.Skip("TODO: receipt backend service temporarily unavailable (503)")
-
 	client := testClient(t)
 	ctx := context.Background()
 
@@ -24,13 +22,11 @@ func TestGetReceipts(t *testing.T) {
 			t.Logf("  ... and %d more", len(receipts)-5)
 			break
 		}
-		t.Logf("  - %s: %s at %s - %.2f EUR", r.TransactionID, r.Date, r.StoreName, r.TotalAmount)
+		t.Logf("  - %s: %s - %.2f EUR", r.TransactionID, r.Date, r.TotalAmount)
 	}
 }
 
 func TestGetReceipt(t *testing.T) {
-	t.Skip("TODO: receipt backend service temporarily unavailable (503)")
-
 	client := testClient(t)
 	ctx := context.Background()
 
@@ -54,7 +50,6 @@ func TestGetReceipt(t *testing.T) {
 
 	t.Logf("Receipt: %s", receipt.TransactionID)
 	t.Logf("  Date: %s", receipt.Date)
-	t.Logf("  Store: %s", receipt.StoreName)
 	t.Logf("  Total: %.2f EUR", receipt.TotalAmount)
 	t.Logf("  Items: %d", len(receipt.Items))
 

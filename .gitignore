@@ -18,3 +18,4 @@ cmd/dev/
 
 # Claude settings
 .claude/
+.vscode

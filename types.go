@@ -255,14 +255,14 @@ type Receipt struct {
 	TransactionID string `json:"transactionId"`
 	// Date is the purchase date/time.
 	Date string `json:"date"`
-	// StoreName is the store where the purchase was made.
-	StoreName string `json:"storeName"`
-	// StoreID is the store identifier.
-	StoreID int `json:"storeId,omitempty"`
 	// TotalAmount is the total purchase amount in EUR.
 	TotalAmount float64 `json:"totalAmount"`
 	// Items contains the purchased products (only in detailed receipt).
 	Items []ReceiptItem `json:"items,omitempty"`
+	// Discounts contains bonus/promotion discounts applied to the receipt.
+	Discounts []ReceiptDiscount `json:"discounts,omitempty"`
+	// Payments contains the payment methods used.
+	Payments []ReceiptPayment `json:"payments,omitempty"`
 }
 
 // ReceiptItem represents a single item on a receipt.
@@ -277,6 +277,22 @@ type ReceiptItem struct {
 	UnitPrice float64 `json:"unitPrice,omitempty"`
 	// ProductID is the webshop product ID if available.
 	ProductID int `json:"productId,omitempty"`
+}
+
+// ReceiptDiscount represents a discount line on a receipt (e.g. KRAS bonus).
+type ReceiptDiscount struct {
+	// Name is the discount description.
+	Name string `json:"name"`
+	// Amount is the discount amount (negative).
+	Amount float64 `json:"amount"`
+}
+
+// ReceiptPayment represents a payment method used for a receipt.
+type ReceiptPayment struct {
+	// Method is the payment type (e.g. "PINNEN").
+	Method string `json:"method"`
+	// Amount is the amount paid.
+	Amount float64 `json:"amount"`
 }
 
 // API error response

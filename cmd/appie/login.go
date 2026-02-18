@@ -1,26 +1,22 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
+	"path/filepath"
 
 	appie "github.com/gwillem/appie-go"
 )
 
-const defaultConfigPath = ".appie.json"
+type loginCommand struct{}
 
-func main() {
-	reader := bufio.NewReader(os.Stdin)
+func (cmd *loginCommand) Execute(args []string) error {
+	configPath := globalOpts.Config
 
-	fmt.Printf("Where to write tokens? [%s]: ", defaultConfigPath)
-	pathInput, _ := reader.ReadString('\n')
-	configPath := strings.TrimSpace(pathInput)
-	if configPath == "" {
-		configPath = defaultConfigPath
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
 	}
 
 	client := appie.New(appie.WithConfigPath(configPath))
@@ -31,9 +27,9 @@ func main() {
 	fmt.Println("Opening browser for AH login...")
 
 	if err := client.Login(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Login failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("login failed: %w", err)
 	}
 
 	fmt.Printf("Login successful! Tokens saved to %s\n", configPath)
+	return nil
 }

@@ -16,6 +16,9 @@ blog-draft.md
 # Dev/test tools
 cmd/dev/
 
+# Build output
+dist/
+
 # Claude settings
 .claude/
 .vscode

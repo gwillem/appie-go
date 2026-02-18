@@ -54,22 +54,14 @@ For orders, shopping lists, and member data, use `Login()` which handles the
 full browser-based OAuth flow automatically:
 
 ```go
-client := appie.New(appie.WithConfigPath(".appie.json"))
+client, err := appie.NewWithConfig(".appie.json")
+
 ctx := context.Background()
 
 if err := client.Login(ctx); err != nil {
     log.Fatal(err)
 }
 // Tokens are auto-saved when configPath is set
-```
-
-Or load previously saved tokens:
-
-```go
-client, err := appie.NewWithConfig(".appie.json")
-if err != nil {
-    log.Fatal(err)
-}
 ```
 
 Expired access tokens are automatically refreshed using the stored refresh token.
@@ -82,10 +74,10 @@ Retrieve in-store purchase receipts:
 // Get all receipts
 receipts, err := client.GetReceipts(ctx)
 for _, r := range receipts {
-    fmt.Printf("%s: %s - €%.2f\n", r.Date, r.StoreName, r.TotalAmount)
+    fmt.Printf("%s: €%.2f\n", r.Date, r.TotalAmount)
 }
 
-// Get receipt details with items
+// Get receipt details with items, discounts, and payments
 receipt, err := client.GetReceipt(ctx, receipts[0].TransactionID)
 for _, item := range receipt.Items {
     fmt.Printf("  %s x%d - €%.2f\n", item.Description, item.Quantity, item.Amount)
@@ -96,41 +88,34 @@ for _, item := range receipt.Items {
 
 See [pkg.go.dev/github.com/gwillem/appie-go](https://pkg.go.dev/github.com/gwillem/appie-go) for full documentation.
 
-## Configuration
+## CLI
 
-The client can be configured with options:
-
-```go
-client := appie.New(
-    appie.WithHTTPClient(customHTTPClient),
-    appie.WithBaseURL("https://api.ah.nl"),
-    appie.WithTokens(accessToken, refreshToken),
-    appie.WithConfigPath(".appie.json"),
-)
-```
-
-### Config File Format
-
-```json
-{
-  "access_token": "eyJ...",
-  "refresh_token": "eyJ...",
-  "expires_at": "2025-02-09T12:00:00Z"
-}
-```
-
-## Command-Line Tools
+Install the `appie` command:
 
 ```bash
-# Login and save credentials
-go run ./cmd/login
+go install github.com/gwillem/appie-go/cmd/appie@latest
 ```
+
+Usage:
+
+```bash
+# Login to Albert Heijn (opens browser for OAuth)
+appie login
+
+# List recent receipts
+appie receipt
+
+# List last 5 receipts
+appie receipt -n 5
+
+# Show receipt details (items, discounts, payment)
+appie receipt <transaction-id>
+```
+
+Config is stored at `~/.config/appie/config.json` (or `$XDG_CONFIG_HOME/appie/config.json`). Override with `-c`.
 
 ## Notes
 
-- Tokens expire after ~7 days. Expired tokens are automatically refreshed when using `NewWithConfig()`.
-- The API uses both REST and GraphQL endpoints internally.
-- Anonymous tokens work for product browsing but not for orders or member data.
 - Rate limiting may apply. AH does not send back-off headers, so the practical rate limit is unknown.
 - **Server-side state:** Albert Heijn maintains an "active order" on the server, which determines the delivery date context for bonus promo visibility. When you call `ReopenOrder`, that order becomes the active one. Always call `RevertOrder` when done to avoid the account being stuck in a future order with incorrect bonus promos.
 

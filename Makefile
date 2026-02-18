@@ -1,7 +1,0 @@
-.PHONY: test integration-test
-
-test:
-	go test -timeout 5s ./...
-
-integration-test:
-	go test -tags integration -count=1 -v ./...

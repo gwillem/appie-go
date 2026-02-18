@@ -9,8 +9,8 @@ Go client library for the Albert Heijn (AH) mobile API (`github.com/gwillem/appi
 ## Commands
 
 ```bash
-make test                # Unit tests (5s timeout, no network)
-make integration-test    # Integration tests (requires .appie.json with valid tokens)
+just test                # Unit tests (5s timeout, no network)
+just integration-test    # Integration tests (requires .appie.json with valid tokens)
 
 # Run a single test
 go test -run TestSearchProducts -v ./...
@@ -40,4 +40,4 @@ go test -tags integration -run TestGetBonusProductsBatch -v -count=1 ./...
 
 **Types** (`types.go`): All public types. Internal API response types (e.g., `productResponse`) live in their respective feature files with `toProduct()`-style converters to public types.
 
-**CLI tools** (`cmd/`): `login` for OAuth flow, `dump-member` and `dump-graphql` for exploration. Dev tools in `cmd/dev/` are gitignored.
+**CLI** (`cmd/appie/`): Unified CLI with subcommands (`login`, `receipt`). Dev tools in `cmd/dev/` are gitignored.

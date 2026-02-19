@@ -2,16 +2,27 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
+	appie "github.com/gwillem/appie-go"
 	"github.com/jessevdk/go-flags"
 )
 
 var globalOpts struct {
 	Config  string         `short:"c" long:"config" description:"Path to config file"`
+	Verbose bool           `short:"v" long:"verbose" description:"Verbose output"`
 	Login   loginCommand   `command:"login" description:"Login to Albert Heijn"`
 	Receipt receiptCommand `command:"receipt" description:"List recent receipts"`
+}
+
+func clientOpts() []appie.Option {
+	opts := []appie.Option{appie.WithConfigPath(globalOpts.Config)}
+	if globalOpts.Verbose {
+		opts = append(opts, appie.WithLogger(log.New(os.Stderr, "", log.Ltime)))
+	}
+	return opts
 }
 
 func defaultConfigPath() string {

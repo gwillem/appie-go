@@ -26,7 +26,7 @@ type receiptCommand struct {
 }
 
 func (cmd *receiptCommand) Execute(args []string) error {
-	client, err := appie.NewWithConfig(globalOpts.Config)
+	client, err := appie.NewWithConfig(globalOpts.Config, clientOpts()...)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}

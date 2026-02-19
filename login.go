@@ -43,7 +43,9 @@ func (c *Client) Login(ctx context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		codeCh <- r.URL.Query().Get("code")
+		code := r.URL.Query().Get("code")
+		c.logger.Printf("callback received, code length=%d", len(code))
+		codeCh <- code
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		io.WriteString(w, loginSuccessPage)
 	})
@@ -61,9 +63,18 @@ func (c *Client) Login(ctx context.Context) error {
 			req.URL.Host = target.Host
 			req.Host = target.Host
 			req.Header.Del("Accept-Encoding")
+			c.logger.Printf("proxy >> %s %s", req.Method, req.URL.Path)
 		},
 		ModifyResponse: func(resp *http.Response) error {
+			c.logger.Printf("proxy << %d %s (%s)", resp.StatusCode, resp.Request.URL.Path, resp.Header.Get("Content-Type"))
+			if loc := resp.Header.Get("Location"); loc != "" {
+				c.logger.Printf("proxy << Location: %s", loc)
+			}
 			return rewriteLoginResponse(resp, localOrigin, target.Host)
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			c.logger.Printf("proxy error: %s %s: %v", r.Method, r.URL.Path, err)
+			http.Error(w, "proxy error", http.StatusBadGateway)
 		},
 	}
 	mux.Handle("/", proxy)
@@ -148,6 +159,7 @@ func readResponseBody(resp *http.Response) ([]byte, error) {
 }
 
 func openDefaultBrowser(url string) {
+	fmt.Println(url)
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
@@ -155,10 +167,7 @@ func openDefaultBrowser(url string) {
 	case "linux":
 		cmd = exec.Command("xdg-open", url)
 	default:
-		fmt.Printf("Open this URL in your browser:\n\n  %s\n\n", url)
 		return
 	}
-	if err := cmd.Start(); err != nil {
-		fmt.Printf("Open this URL in your browser:\n\n  %s\n\n", url)
-	}
+	_ = cmd.Start()
 }

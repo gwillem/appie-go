@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -42,6 +43,7 @@ type Client struct {
 	configPath   string
 	loginBaseURL string      // overridable for testing; defaults to "https://login.ah.nl"
 	openBrowser  func(string) // overridable for testing; nil uses default
+	logger       *log.Logger
 }
 
 // Option configures the client. Use With* functions to create options.
@@ -69,6 +71,13 @@ func WithTokens(accessToken, refreshToken string) Option {
 	}
 }
 
+// WithLogger sets a logger for verbose request logging.
+func WithLogger(l *log.Logger) Option {
+	return func(c *Client) {
+		c.logger = l
+	}
+}
+
 // WithConfigPath sets the path to the config file.
 func WithConfigPath(path string) Option {
 	return func(c *Client) {
@@ -84,6 +93,7 @@ func New(opts ...Option) *Client {
 		userAgent:     defaultUserAgent,
 		clientID:      defaultClientID,
 		clientVersion: defaultClientVersion,
+		logger:        log.New(io.Discard, "", 0),
 	}
 
 	for _, opt := range opts {
@@ -94,8 +104,8 @@ func New(opts ...Option) *Client {
 }
 
 // NewWithConfig creates a new client and loads config from the given path.
-func NewWithConfig(configPath string) (*Client, error) {
-	c := New(WithConfigPath(configPath))
+func NewWithConfig(configPath string, opts ...Option) (*Client, error) {
+	c := New(append([]Option{WithConfigPath(configPath)}, opts...)...)
 
 	if err := c.loadConfig(); err != nil {
 		if os.IsNotExist(err) {
@@ -226,11 +236,14 @@ func (c *Client) DoRequest(ctx context.Context, method, path string, body, resul
 	}
 	c.setHeaders(req)
 
+	start := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	c.logger.Printf("%s %s %d %s", method, path, resp.StatusCode, time.Since(start).Truncate(time.Millisecond))
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

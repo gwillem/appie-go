@@ -1,11 +1,14 @@
 package appie
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -169,6 +172,34 @@ func TestNoAutoRefreshForAuthEndpoints(t *testing.T) {
 	}
 	if client.accessToken != "new-access" {
 		t.Errorf("expected 'new-access', got '%s'", client.accessToken)
+	}
+}
+
+func TestWithLoggerLogsRequests(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}))
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	client := New(WithBaseURL(srv.URL), WithLogger(logger))
+
+	ctx := context.Background()
+	var result map[string]string
+	if err := client.DoRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result); err != nil {
+		t.Fatal(err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "GET") {
+		t.Errorf("expected verbose output to contain method, got %q", output)
+	}
+	if !strings.Contains(output, "/test-endpoint") {
+		t.Errorf("expected verbose output to contain path, got %q", output)
+	}
+	if !strings.Contains(output, "200") {
+		t.Errorf("expected verbose output to contain status code, got %q", output)
 	}
 }
 

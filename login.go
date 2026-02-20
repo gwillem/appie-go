@@ -122,6 +122,17 @@ func rewriteLoginResponse(resp *http.Response, localOrigin, targetHost string) e
 	resp.Header.Del("Strict-Transport-Security")
 	resp.Header.Del("X-Frame-Options")
 
+	// Rewrite cookies: strip Secure/SameSite/Domain so they work over plain
+	// HTTP on 127.0.0.1. Safari (unlike Chrome) does not treat localhost as a
+	// secure context, so Secure cookies are silently dropped, breaking the
+	// login session.
+	if cookies := resp.Header.Values("Set-Cookie"); len(cookies) > 0 {
+		resp.Header.Del("Set-Cookie")
+		for _, c := range cookies {
+			resp.Header.Add("Set-Cookie", sanitizeCookie(c))
+		}
+	}
+
 	// Only rewrite text response bodies
 	ct := resp.Header.Get("Content-Type")
 	if !strings.Contains(ct, "text/html") && !strings.Contains(ct, "javascript") && !strings.Contains(ct, "json") {
@@ -141,6 +152,24 @@ func rewriteLoginResponse(resp *http.Response, localOrigin, targetHost string) e
 	resp.Header.Del("Content-Encoding")
 
 	return nil
+}
+
+// sanitizeCookie strips Secure, SameSite, and Domain attributes from a
+// Set-Cookie header value so the cookie works over plain HTTP on localhost.
+func sanitizeCookie(cookie string) string {
+	parts := strings.Split(cookie, ";")
+	out := parts[:1] // always keep the name=value part
+	for _, p := range parts[1:] {
+		attr := strings.TrimSpace(p)
+		lower := strings.ToLower(attr)
+		if lower == "secure" ||
+			strings.HasPrefix(lower, "samesite") ||
+			strings.HasPrefix(lower, "domain") {
+			continue
+		}
+		out = append(out, p)
+	}
+	return strings.Join(out, ";")
 }
 
 func readResponseBody(resp *http.Response) ([]byte, error) {

@@ -124,6 +124,68 @@ func TestLoginRewritesLocationHeader(t *testing.T) {
 	}
 }
 
+func TestSanitizeCookie(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{
+			"sid=abc123; Path=/; Secure; HttpOnly; SameSite=None",
+			"sid=abc123; Path=/; HttpOnly",
+		},
+		{
+			"token=xyz; Domain=.ah.nl; Secure; Path=/; SameSite=Lax",
+			"token=xyz; Path=/",
+		},
+		{
+			"simple=val",
+			"simple=val",
+		},
+		{
+			"a=b; secure; DOMAIN=login.ah.nl; samesite=strict; HttpOnly",
+			"a=b; HttpOnly",
+		},
+	}
+	for _, tt := range tests {
+		got := sanitizeCookie(tt.in)
+		if got != tt.want {
+			t.Errorf("sanitizeCookie(%q)\n got %q\nwant %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestLoginRewritesCookies(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: 200,
+		Header: http.Header{
+			"Content-Type": {"text/html"},
+			"Set-Cookie": {
+				"sid=abc; Path=/; Secure; HttpOnly; SameSite=None; Domain=.ah.nl",
+				"token=xyz; Secure; Path=/",
+			},
+		},
+		Body: io.NopCloser(strings.NewReader("<html>ok</html>")),
+	}
+
+	err := rewriteLoginResponse(resp, "http://127.0.0.1:9999", "login.ah.nl")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cookies := resp.Header.Values("Set-Cookie")
+	for _, c := range cookies {
+		lower := strings.ToLower(c)
+		if strings.Contains(lower, "secure") {
+			t.Errorf("cookie still contains Secure: %s", c)
+		}
+		if strings.Contains(lower, "samesite") {
+			t.Errorf("cookie still contains SameSite: %s", c)
+		}
+		if strings.Contains(lower, "domain") {
+			t.Errorf("cookie still contains Domain: %s", c)
+		}
+	}
+}
+
 func TestLoginContextCancel(t *testing.T) {
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))

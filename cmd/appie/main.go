@@ -13,6 +13,7 @@ var globalOpts struct {
 	Config  string         `short:"c" long:"config" description:"Path to config file"`
 	Verbose bool           `short:"v" long:"verbose" description:"Verbose output"`
 	Login   loginCommand   `command:"login" description:"Login to Albert Heijn"`
+	Search  searchCommand  `command:"search" description:"Search for products"`
 	Receipt receiptCommand `command:"receipt" description:"List recent receipts"`
 	Order   orderCommand   `command:"order" subcommands-optional:"true" description:"Show active order contents"`
 }

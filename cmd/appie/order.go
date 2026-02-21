@@ -1,12 +1,10 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
-	"slices"
 	"strconv"
 	"text/tabwriter"
 
@@ -236,14 +234,7 @@ func (cmd *addCommand) Execute(args []string) error {
 			return fmt.Errorf("no products found for %q", product)
 		}
 		if len(products) > 1 {
-			slices.SortFunc(products, func(a, b appie.Product) int {
-				return cmp.Compare(a.Price.Now, b.Price.Now)
-			})
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			for _, p := range products {
-				fmt.Fprintf(w, "  %d\t%s\t%s\t€%.2f\n", p.ID, p.Title, p.UnitSize, p.Price.Now)
-			}
-			w.Flush()
+			printProducts(products)
 			return fmt.Errorf("multiple matches for %q, specify product ID", product)
 		}
 		productID = products[0].ID

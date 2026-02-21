@@ -209,15 +209,13 @@ func (c *Client) GetProductsByIDs(ctx context.Context, productIDs []int) ([]Prod
 
 	path := "/mobile-services/product/search/v2/products?" + params.Encode()
 
-	var result struct {
-		Products []productResponse `json:"products"`
-	}
+	var result []productResponse
 	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get products by ids failed: %w", err)
 	}
 
-	products := make([]Product, 0, len(result.Products))
-	for _, p := range result.Products {
+	products := make([]Product, 0, len(result))
+	for _, p := range result {
 		products = append(products, p.toProduct())
 	}
 

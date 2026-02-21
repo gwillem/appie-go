@@ -50,16 +50,32 @@ $ appie order list
    1234590  SUBMITTED  vrijdag 28 feb  08:00-10:00         42.15
 ```
 
-#### `order add <product-id> [quantity]`
+#### `order add <product> [-n quantity]`
 
-Add a product to the active order. Default quantity is 1.
+Add a product to the active order. `<product>` can be a numeric product ID or a search term. Default quantity is 1.
+
+```
+  -n, --quantity NUM    Quantity to add (default: 1)
+```
 
 ```
 $ appie order add 371880
-Added 1x Optimel Drinkyoghurt aardbei (€1.59)
+Added 1x 371880
 
-$ appie order add 371880 3
-Added 3x Optimel Drinkyoghurt aardbei (€1.59)
+$ appie order add 371880 -n 3
+Added 3x 371880
+
+$ appie order add "halfvolle melk"
+Found: AH Halfvolle melk
+Added 1x 12345
+
+$ appie order add "hagelslag puur"
+  32786   AH Hagelslag puur                            250 g    €2.59
+  55732   AH Chocoladepasta puur                       400 g    €2.69
+  465752  AH Hagelslag xl puur                         600 g    €2.99
+  1608    AH Hagelslag puur                            600 g    €2.99
+  ...
+multiple matches for "hagelslag puur", specify product ID
 ```
 
 #### `order rm <product-id>`
@@ -83,26 +99,56 @@ Active order: 1234590
 
 ### `list`
 
-List shopping lists, or show items for a specific list.
-
-```
-  -i, --id ID    Show items for a specific list
-```
+Show shopping lists overview. All list subcommands accept a list name by prefix match.
 
 ```
 $ appie list
-ID                                    Name              Items
-a1b2c3d4-e5f6-7890-abcd-ef1234567890  Boodschappen         12
-f9e8d7c6-b5a4-3210-fedc-ba0987654321  Weekmenu              5
+  Boodschappen  12 items
+  Weekmenu       5 items
+```
 
-$ appie list -i a1b2c3d4-e5f6-7890-abcd-ef1234567890
+#### `list show <name>`
+
+Show items in a list by name (case-insensitive prefix match). Items are numbered for use with `list rm`.
+
+```
+$ appie list show Boodschappen
 Boodschappen (12 items)
 
-   Product                         Qty  Checked
-   AH Verse halfvolle melk 2L       1
-   AH Pindakaas naturel             2
-   Brinta Origineel                  1   [x]
-   kaas (vrije tekst)               1
+ 1  AH Halfvolle melk       1 L    1  €1.89
+ 2  AH Pindakaas naturel    600 g  2  €3.59
+ 3  kaas                           1
+```
+
+#### `list add <product> [-n quantity] [-l name]`
+
+Add a product to a list. `<product>` can be a numeric product ID or a search term. Uses `-l` to select the list by name (optional if only one list exists).
+
+```
+  -n, --quantity NUM    Quantity to add (default: 1)
+  -l, --list NAME       List name (prefix match)
+```
+
+```
+$ appie list add 371880 -l Boodschappen
+Added 1x 371880 to Boodschappen
+
+$ appie list add "pindakaas"
+Found: AH Pindakaas naturel
+Added 1x 371880 to Boodschappen
+```
+
+#### `list rm <number> [-l name]`
+
+Remove an item by its line number from `list show` output.
+
+```
+  -l, --list NAME    List name (prefix match)
+```
+
+```
+$ appie list rm 3 -l Boodschappen
+Removed #3 (kaas) from Boodschappen
 ```
 
 ### `bonus`
@@ -140,17 +186,16 @@ Bonus week 28 feb - 6 mrt
 
 ### `search <query>`
 
-Search products by name. Needed to find product IDs for `order add`.
+Search products by name. Results sorted by price (low to high). Use product IDs with `order add`.
 
 ```
-  -n, --limit NUM    Max results (default: 10)
+  -n, --limit NUM    Max results (default: 20)
 ```
 
 ```
 $ appie search "pindakaas"
-ID       Product                          Price  Bonus
-371880   AH Pindakaas naturel 600g        3.59
-204835   Calvé Pindakaas 650g             4.49   35% korting
-192450   AH Biologisch pindakaas 350g     2.89
-...
+  192450  AH Biologisch pindakaas          350 g  €2.89
+  371880  AH Pindakaas naturel             600 g  €3.59
+  204835  Calvé Pindakaas                  650 g  €4.49
+  ...
 ```

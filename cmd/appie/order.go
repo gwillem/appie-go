@@ -1,10 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"text/tabwriter"
 
@@ -14,6 +16,7 @@ import (
 type orderCommand struct {
 	List listCommand `command:"list" alias:"ls" description:"List all open orders"`
 	Use  useCommand  `command:"use" description:"Set a different order as active (reopens if submitted)"`
+	Add  addCommand  `command:"add" description:"Add a product to the active order"`
 }
 
 func (cmd *orderCommand) Execute(args []string) error {
@@ -195,6 +198,63 @@ func (cmd *useCommand) Execute(args []string) error {
 	}
 
 	fmt.Printf("Active order: %d\n", orderID)
+	return nil
+}
+
+// add subcommand
+
+type addCommand struct {
+	Args struct {
+		Product string `positional-arg-name:"product" required:"true"`
+	} `positional-args:"yes"`
+	Quantity int `short:"n" long:"quantity" default:"1" description:"Quantity to add"`
+}
+
+func (cmd *addCommand) Execute(args []string) error {
+	ctx, client, err := orderSetup()
+	if err != nil {
+		return err
+	}
+
+	// Fetch active order to populate order ID header
+	if _, err := client.GetOrder(ctx); err != nil {
+		return fmt.Errorf("no active order: %w", err)
+	}
+
+	product := cmd.Args.Product
+	qty := cmd.Quantity
+
+	// If numeric, use as product ID directly
+	productID, err := strconv.Atoi(product)
+	if err != nil {
+		// Search for the product
+		products, err := client.SearchProducts(ctx, product, 15)
+		if err != nil {
+			return fmt.Errorf("search failed: %w", err)
+		}
+		if len(products) == 0 {
+			return fmt.Errorf("no products found for %q", product)
+		}
+		if len(products) > 1 {
+			slices.SortFunc(products, func(a, b appie.Product) int {
+				return cmp.Compare(a.Price.Now, b.Price.Now)
+			})
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			for _, p := range products {
+				fmt.Fprintf(w, "  %d\t%s\t%s\t€%.2f\n", p.ID, p.Title, p.UnitSize, p.Price.Now)
+			}
+			w.Flush()
+			return fmt.Errorf("multiple matches for %q, specify product ID", product)
+		}
+		productID = products[0].ID
+		fmt.Printf("Found: %s\n", products[0].Title)
+	}
+
+	if err := client.AddToOrder(ctx, []appie.OrderItem{{ProductID: productID, Quantity: qty}}); err != nil {
+		return err
+	}
+
+	fmt.Printf("Added %dx %d\n", qty, productID)
 	return nil
 }
 

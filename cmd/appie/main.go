@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -48,7 +47,6 @@ func main() {
 		if flags.WroteHelp(err) {
 			os.Exit(0)
 		}
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

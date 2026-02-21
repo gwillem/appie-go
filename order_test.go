@@ -254,6 +254,87 @@ func TestOrderDetailsTotals(t *testing.T) {
 	}
 }
 
+func TestAddToOrderBySearch(t *testing.T) {
+	var addedItems []struct {
+		ProductID int `json:"productId"`
+		Quantity  int `json:"quantity"`
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/mobile-services/product/search/v2" && r.Method == http.MethodGet:
+			json.NewEncoder(w).Encode(map[string]any{
+				"products": []map[string]any{
+					{
+						"webshopId":        12345,
+						"title":            "AH Halfvolle melk",
+						"brand":            "AH",
+						"salesUnitSize":    "1 L",
+						"currentPrice":     1.15,
+						"priceBeforeBonus": 1.15,
+						"availableOnline":  true,
+						"isOrderable":      true,
+					},
+				},
+				"page": map[string]any{
+					"totalElements": 1,
+				},
+			})
+
+		case r.URL.Path == "/mobile-services/order/v1/items" && r.Method == http.MethodPut:
+			var body struct {
+				Items []struct {
+					ProductID int `json:"productId"`
+					Quantity  int `json:"quantity"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode body: %v", err)
+				http.Error(w, "bad request", 400)
+				return
+			}
+			addedItems = body.Items
+			w.WriteHeader(http.StatusOK)
+
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	ctx := context.Background()
+
+	// Search → should find 1 product
+	products, err := client.SearchProducts(ctx, "halfvolle melk", 5)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(products))
+	}
+	if products[0].ID != 12345 {
+		t.Errorf("expected product ID 12345, got %d", products[0].ID)
+	}
+
+	// Add to order
+	err = client.AddToOrder(ctx, []OrderItem{{ProductID: products[0].ID, Quantity: 3}})
+	if err != nil {
+		t.Fatalf("add to order: %v", err)
+	}
+
+	if len(addedItems) != 1 {
+		t.Fatalf("expected 1 item added, got %d", len(addedItems))
+	}
+	if addedItems[0].ProductID != 12345 {
+		t.Errorf("expected product ID 12345, got %d", addedItems[0].ProductID)
+	}
+	if addedItems[0].Quantity != 3 {
+		t.Errorf("expected quantity 3, got %d", addedItems[0].Quantity)
+	}
+}
+
 func TestGetOrderDetailsNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

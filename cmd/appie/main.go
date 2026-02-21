@@ -15,6 +15,7 @@ var globalOpts struct {
 	Verbose bool           `short:"v" long:"verbose" description:"Verbose output"`
 	Login   loginCommand   `command:"login" description:"Login to Albert Heijn"`
 	Receipt receiptCommand `command:"receipt" description:"List recent receipts"`
+	Order   orderCommand   `command:"order" subcommands-optional:"true" description:"Show active order contents"`
 }
 
 func clientOpts() []appie.Option {

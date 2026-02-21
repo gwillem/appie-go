@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	defaultBaseURL    = "https://api.ah.nl"
-	defaultUserAgent  = "Appie/9.28 (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)"
-	defaultClientID   = "appie-ios"
+	defaultBaseURL       = "https://api.ah.nl"
+	defaultUserAgent     = "Appie/9.28 (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)"
+	defaultClientID      = "appie-ios"
 	defaultClientVersion = "9.28"
 )
 
@@ -26,10 +26,10 @@ const (
 //
 // Client is safe for concurrent use. Token state is protected by a mutex.
 type Client struct {
-	httpClient *http.Client
-	baseURL    string
-	userAgent  string
-	clientID   string
+	httpClient    *http.Client
+	baseURL       string
+	userAgent     string
+	clientID      string
 	clientVersion string
 
 	mu           sync.RWMutex
@@ -37,11 +37,11 @@ type Client struct {
 	refreshToken string
 	memberID     string
 	expiresAt    time.Time
-	orderID      string
+	orderID      string // sent as appie-current-order-id header, mirroring the iOS app; the API may use this (not server-side state) to determine the active order
 	orderHash    string
 
 	configPath   string
-	loginBaseURL string      // overridable for testing; defaults to "https://login.ah.nl"
+	loginBaseURL string       // overridable for testing; defaults to "https://login.ah.nl"
 	openBrowser  func(string) // overridable for testing; nil uses default
 	logger       *log.Logger
 }

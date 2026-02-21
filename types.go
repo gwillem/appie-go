@@ -105,10 +105,30 @@ type Order struct {
 	Items []OrderItem `json:"items"`
 	// TotalCount is the number of unique items.
 	TotalCount int `json:"totalCount"`
-	// TotalPrice is the total order value in EUR.
+	// TotalPrice is the total order value in EUR (after discounts).
 	TotalPrice float64 `json:"totalPrice"`
+	// TotalDiscount is the total bonus discount in EUR.
+	TotalDiscount float64 `json:"totalDiscount,omitempty"`
 	// LastUpdated is when the order was last modified.
 	LastUpdated time.Time `json:"lastUpdated,omitempty"`
+}
+
+// Subtotal returns the sum of undiscounted line prices (priceBeforeBonus * qty).
+// Note: scratch card items may have no price, so Subtotal can be less than
+// TotalPrice + TotalDiscount. Use TotalPrice for the actual amount to pay.
+func (o *Order) Subtotal() float64 {
+	var sum float64
+	for _, item := range o.Items {
+		if item.Product == nil {
+			continue
+		}
+		unitPrice := item.Product.Price.Now
+		if item.Product.Price.Was > 0 {
+			unitPrice = item.Product.Price.Was
+		}
+		sum += float64(item.Quantity) * unitPrice
+	}
+	return sum
 }
 
 // OrderItem represents a product and quantity in an order.
@@ -165,9 +185,9 @@ type Member struct {
 	FirstName       string   `json:"firstName"`
 	LastName        string   `json:"lastName"`
 	Email           string   `json:"email"`
-	Gender          string   `json:"gender,omitempty"`          // "MALE", "FEMALE", or empty
-	DateOfBirth     string   `json:"dateOfBirth,omitempty"`     // Format: "YYYY-MM-DD"
-	PhoneNumber     string   `json:"phoneNumber,omitempty"`     // Dutch format with country code
+	Gender          string   `json:"gender,omitempty"`      // "MALE", "FEMALE", or empty
+	DateOfBirth     string   `json:"dateOfBirth,omitempty"` // Format: "YYYY-MM-DD"
+	PhoneNumber     string   `json:"phoneNumber,omitempty"` // Dutch format with country code
 	Address         Address  `json:"address,omitempty"`
 	BonusCardNumber string   `json:"bonusCardNumber,omitempty"` // 13-digit card number
 	GallCardNumber  string   `json:"gallCardNumber,omitempty"`  // Gall & Gall card
@@ -183,7 +203,6 @@ type Address struct {
 	City             string `json:"city"`
 	CountryCode      string `json:"countryCode,omitempty"` // e.g., "NL"
 }
-
 
 // Fulfillment represents a scheduled order with delivery information.
 // A fulfillment is an order that has been submitted for delivery.

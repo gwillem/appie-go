@@ -7,6 +7,67 @@ import (
 	"strconv"
 )
 
+// orderDetailsResponse matches the API response for order details grouped by taxonomy.
+type orderDetailsResponse struct {
+	OrderID      int    `json:"orderId"`
+	OrderState   string `json:"orderState"`
+	DeliveryDate string `json:"deliveryDate"`
+	DeliveryType string `json:"deliveryType"`
+	DeliveryTime struct {
+		StartDateTime string `json:"startDateTime"`
+		EndDateTime   string `json:"endDateTime"`
+	} `json:"deliveryTimePeriod"`
+	GroupedProducts []struct {
+		TaxonomyName    string `json:"taxonomyName"`
+		OrderedProducts []struct {
+			Amount   int `json:"amount"`
+			Quantity int `json:"quantity"`
+			Product  struct {
+				WebshopID        int      `json:"webshopId"`
+				Title            string   `json:"title"`
+				Brand            string   `json:"brand"`
+				SalesUnitSize    string   `json:"salesUnitSize"`
+				PriceBeforeBonus float64  `json:"priceBeforeBonus"`
+				CurrentPrice     *float64 `json:"currentPrice"` // discounted price, nil when discount is per-group (e.g. "2e gratis")
+				IsBonus          bool     `json:"isBonus"`
+				BonusMechanism   string   `json:"bonusMechanism"`
+			} `json:"product"`
+		} `json:"orderedProducts"`
+	} `json:"groupedProductsInTaxonomy"`
+}
+
+func (r *orderDetailsResponse) toOrder() Order {
+	var items []OrderItem
+	for _, group := range r.GroupedProducts {
+		for _, op := range group.OrderedProducts {
+			price := Price{Now: op.Product.PriceBeforeBonus}
+			if op.Product.CurrentPrice != nil {
+				price = Price{Now: *op.Product.CurrentPrice, Was: op.Product.PriceBeforeBonus}
+			}
+			items = append(items, OrderItem{
+				ProductID: op.Product.WebshopID,
+				Quantity:  op.Quantity,
+				Product: &Product{
+					ID:             op.Product.WebshopID,
+					Title:          op.Product.Title,
+					Brand:          op.Product.Brand,
+					UnitSize:       op.Product.SalesUnitSize,
+					Price:          price,
+					IsBonus:        op.Product.IsBonus,
+					BonusMechanism: op.Product.BonusMechanism,
+				},
+			})
+		}
+	}
+
+	return Order{
+		ID:         strconv.Itoa(r.OrderID),
+		State:      r.OrderState,
+		Items:      items,
+		TotalCount: len(items),
+	}
+}
+
 // orderSummaryResponse matches the API response for active order summary.
 type orderSummaryResponse struct {
 	ID           int    `json:"id"`
@@ -33,9 +94,9 @@ type orderSummaryResponse struct {
 		Amount   int `json:"amount"`
 		Quantity int `json:"quantity"`
 		Product  struct {
-			WebshopID int      `json:"webshopId"`
-			Title     string   `json:"title"`
-			Brand     string   `json:"brand"`
+			WebshopID int    `json:"webshopId"`
+			Title     string `json:"title"`
+			Brand     string `json:"brand"`
 			Images    []struct {
 				URL string `json:"url"`
 			} `json:"images"`
@@ -63,11 +124,12 @@ func (r *orderSummaryResponse) toOrder() Order {
 	}
 
 	return Order{
-		ID:         strconv.Itoa(r.ID),
-		State:      r.State,
-		Items:      items,
-		TotalCount: len(items),
-		TotalPrice: r.TotalPrice.PriceTotalPayable,
+		ID:            strconv.Itoa(r.ID),
+		State:         r.State,
+		Items:         items,
+		TotalCount:    len(items),
+		TotalPrice:    r.TotalPrice.PriceTotalPayable,
+		TotalDiscount: r.TotalPrice.PriceDiscount,
 	}
 }
 
@@ -83,6 +145,21 @@ func (c *Client) GetOrder(ctx context.Context) (*Order, error) {
 	c.mu.Lock()
 	c.orderID = strconv.Itoa(result.ID)
 	c.mu.Unlock()
+
+	order := result.toOrder()
+	return &order, nil
+}
+
+// GetOrderDetails retrieves the details of a specific order by ID.
+// Unlike GetOrder, this works for any order (not just the active one) and
+// returns products grouped by taxonomy (category).
+func (c *Client) GetOrderDetails(ctx context.Context, orderID int) (*Order, error) {
+	path := fmt.Sprintf("/mobile-services/order/v1/%d/details-grouped-by-taxonomy", orderID)
+
+	var result orderDetailsResponse
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+		return nil, fmt.Errorf("get order details failed: %w", err)
+	}
 
 	order := result.toOrder()
 	return &order, nil
@@ -302,24 +379,7 @@ type fulfillmentResult struct {
 			Amount float64 `json:"amount"`
 		} `json:"totalPrice"`
 	} `json:"totalPrice"`
-	Delivery struct {
-		Status string `json:"status"`
-		Method string `json:"method"`
-		Slot   struct {
-			Date        string `json:"date"`
-			DateDisplay string `json:"dateDisplay"`
-			TimeDisplay string `json:"timeDisplay"`
-			StartTime   string `json:"startTime"`
-			EndTime     string `json:"endTime"`
-		} `json:"slot"`
-		Address struct {
-			Street           string `json:"street"`
-			HouseNumber      int    `json:"houseNumber"`
-			HouseNumberExtra string `json:"houseNumberExtra"`
-			City             string `json:"city"`
-			PostalCode       string `json:"postalCode"`
-		} `json:"address"`
-	} `json:"delivery"`
+	Delivery FulfillmentDelivery `json:"delivery"`
 }
 
 // GetFulfillments retrieves all open (scheduled) order fulfillments.
@@ -342,24 +402,7 @@ func (c *Client) GetFulfillments(ctx context.Context) ([]Fulfillment, error) {
 			TotalPrice:           r.TotalPrice.TotalPrice.Amount,
 			TransactionCompleted: r.TransactionCompleted,
 			Modifiable:           r.Modifiable,
-			Delivery: FulfillmentDelivery{
-				Status: r.Delivery.Status,
-				Method: r.Delivery.Method,
-				Slot: DeliverySlot{
-					Date:        r.Delivery.Slot.Date,
-					DateDisplay: r.Delivery.Slot.DateDisplay,
-					TimeDisplay: r.Delivery.Slot.TimeDisplay,
-					StartTime:   r.Delivery.Slot.StartTime,
-					EndTime:     r.Delivery.Slot.EndTime,
-				},
-				Address: Address{
-					Street:           r.Delivery.Address.Street,
-					HouseNumber:      r.Delivery.Address.HouseNumber,
-					HouseNumberExtra: r.Delivery.Address.HouseNumberExtra,
-					City:             r.Delivery.Address.City,
-					PostalCode:       r.Delivery.Address.PostalCode,
-				},
-			},
+			Delivery:             r.Delivery,
 		})
 	}
 

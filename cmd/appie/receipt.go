@@ -12,8 +12,8 @@ import (
 
 // trimMillis strips sub-second precision from a timestamp string (e.g. ".000" in "T14:30:00.000").
 func trimMillis(s string) string {
-	if i := strings.IndexByte(s, '.'); i != -1 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "."); ok {
+		return before
 	}
 	return s
 }

@@ -53,21 +53,14 @@ type memberResponse struct {
 			First string `json:"first"`
 			Last  string `json:"last"`
 		} `json:"name"`
-		Address struct {
-			Street           string `json:"street"`
-			HouseNumber      int    `json:"houseNumber"`
-			HouseNumberExtra string `json:"houseNumberExtra"`
-			PostalCode       string `json:"postalCode"`
-			City             string `json:"city"`
-			CountryCode      string `json:"countryCode"`
-		} `json:"address"`
-		Cards struct {
+		Address Address `json:"address"`
+		Cards   struct {
 			Bonus    string `json:"bonus"`
 			Gall     string `json:"gall"`
 			Airmiles string `json:"airmiles"`
 		} `json:"cards"`
-		CustomerProfileAudiences   []string `json:"customerProfileAudiences"`
-		CustomerProfileProperties  []struct {
+		CustomerProfileAudiences  []string `json:"customerProfileAudiences"`
+		CustomerProfileProperties []struct {
 			Key   string `json:"key"`
 			Value any    `json:"value"`
 		} `json:"customerProfileProperties"`
@@ -84,24 +77,16 @@ func (c *Client) GetMember(ctx context.Context) (*Member, error) {
 
 	m := resp.Member
 	return &Member{
-		ID:          strconv.Itoa(m.ID),
-		FirstName:   m.Name.First,
-		LastName:    m.Name.Last,
-		Email:       m.EmailAddress,
-		Gender:      m.Gender,
-		DateOfBirth: m.DateOfBirth,
-		PhoneNumber: m.PhoneNumber,
-		Address: Address{
-			Street:           m.Address.Street,
-			HouseNumber:      m.Address.HouseNumber,
-			HouseNumberExtra: m.Address.HouseNumberExtra,
-			PostalCode:       m.Address.PostalCode,
-			City:             m.Address.City,
-			CountryCode:      m.Address.CountryCode,
-		},
+		ID:              strconv.Itoa(m.ID),
+		FirstName:       m.Name.First,
+		LastName:        m.Name.Last,
+		Email:           m.EmailAddress,
+		Gender:          m.Gender,
+		DateOfBirth:     m.DateOfBirth,
+		PhoneNumber:     m.PhoneNumber,
+		Address:         m.Address,
 		BonusCardNumber: m.Cards.Bonus,
 		GallCardNumber:  m.Cards.Gall,
 		Audiences:       m.CustomerProfileAudiences,
 	}, nil
 }
-

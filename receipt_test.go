@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestGetReceipts(t *testing.T) {
+func TestGetReceiptsIntegration(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
 
@@ -26,7 +26,7 @@ func TestGetReceipts(t *testing.T) {
 	}
 }
 
-func TestGetReceipt(t *testing.T) {
+func TestGetReceiptIntegration(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()
 

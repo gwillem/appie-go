@@ -42,22 +42,13 @@ type bonusGroupResponse struct {
 	SegmentDescription  string            `json:"segmentDescription"`
 	DiscountDescription string            `json:"discountDescription"`
 	Category            string            `json:"category"`
-	Images              []imageResponse   `json:"images"`
+	Images              []Image           `json:"images"`
 	Products            []productResponse `json:"products"`
 	ExampleFromPrice    float64           `json:"exampleFromPrice"`
 	ExampleForPrice     float64           `json:"exampleForPrice"`
 }
 
 func (bg *bonusGroupResponse) toProduct() Product {
-	var images []Image
-	for _, img := range bg.Images {
-		images = append(images, Image{
-			URL:    img.URL,
-			Width:  img.Width,
-			Height: img.Height,
-		})
-	}
-
 	return Product{
 		Title:          bg.SegmentDescription,
 		Category:       bg.Category,
@@ -68,7 +59,7 @@ func (bg *bonusGroupResponse) toProduct() Product {
 			Now: bg.ExampleForPrice,
 			Was: bg.ExampleFromPrice,
 		},
-		Images: images,
+		Images: bg.Images,
 	}
 }
 

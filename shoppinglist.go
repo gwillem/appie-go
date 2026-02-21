@@ -57,7 +57,63 @@ func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]Shoppin
 	return lists, nil
 }
 
-// getShoppingList retrieves the first (default) favorite list.
+// GetShoppingListItems retrieves all items for a specific list (v2 GraphQL).
+func (c *Client) GetShoppingListItems(ctx context.Context, listID string) ([]ListItem, error) {
+	const query = `query FavoriteListV2($ids: [String!]!) {
+  favoriteListV2(ids: $ids) {
+    id
+    description
+    totalSize
+    items {
+      id
+      productId
+      quantity
+    }
+  }
+}`
+
+	variables := map[string]any{
+		"ids": []string{strings.ToUpper(listID)},
+	}
+
+	type listItemResult struct {
+		ID        string `json:"id"`
+		ProductID int    `json:"productId"`
+		Quantity  int    `json:"quantity"`
+	}
+	type listResult struct {
+		ID          string           `json:"id"`
+		Description string           `json:"description"`
+		TotalSize   int              `json:"totalSize"`
+		Items       []listItemResult `json:"items"`
+	}
+
+	// API may return a single object or array; try array first.
+	var arrResult struct {
+		FavoriteListV2 []listResult `json:"favoriteListV2"`
+	}
+	if err := c.DoGraphQL(ctx, query, variables, &arrResult); err != nil {
+		return nil, fmt.Errorf("get shopping list items failed: %w", err)
+	}
+
+	if len(arrResult.FavoriteListV2) == 0 {
+		return nil, fmt.Errorf("list %s not found", listID)
+	}
+
+	raw := arrResult.FavoriteListV2[0].Items
+	items := make([]ListItem, 0, len(raw))
+	for _, item := range raw {
+		items = append(items, ListItem{
+			ID:        item.ID,
+			ProductID: item.ProductID,
+			Quantity:  max(item.Quantity, 1),
+		})
+	}
+
+	return items, nil
+}
+
+// getShoppingList retrieves the first (default) favorite list with its items populated.
 func (c *Client) getShoppingList(ctx context.Context) (*ShoppingList, error) {
 	lists, err := c.GetShoppingLists(ctx, 0)
 	if err != nil {
@@ -67,6 +123,12 @@ func (c *Client) getShoppingList(ctx context.Context) (*ShoppingList, error) {
 	if len(lists) == 0 {
 		return nil, fmt.Errorf("no shopping lists found")
 	}
+
+	items, err := c.GetShoppingListItems(ctx, lists[0].ID)
+	if err != nil {
+		return nil, err
+	}
+	lists[0].Items = items
 
 	return &lists[0], nil
 }

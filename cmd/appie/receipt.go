@@ -22,6 +22,9 @@ type receiptCommand struct {
 }
 
 func (cmd *receiptCommand) Execute(args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("unknown argument %q, did you mean: appie receipt show %s", args[0], args[0])
+	}
 	ctx, client, err := orderSetup()
 	if err != nil {
 		return err

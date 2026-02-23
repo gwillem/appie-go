@@ -16,6 +16,9 @@ type shoppingListCommand struct {
 }
 
 func (cmd *shoppingListCommand) Execute(args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("unknown argument %q, did you mean: appie list show %s", args[0], args[0])
+	}
 	ctx, client, err := orderSetup()
 	if err != nil {
 		return err

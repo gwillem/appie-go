@@ -104,14 +104,24 @@ Usage:
 # Login to Albert Heijn (opens browser for OAuth)
 appie login
 
-# List recent receipts
-appie receipt
+# Search products
+appie search "pindakaas"
 
-# List last 5 receipts
-appie receipt -n 5
+# Receipts
+appie receipt                          # list recent receipts
+appie receipt show <transaction-id>    # show items, discounts, payment
 
-# Show receipt details (items, discounts, payment)
-appie receipt <transaction-id>
+# Orders
+appie order                            # list open orders
+appie order show <order-id>            # show order contents
+appie order add <order-id> <product>   # add product (by ID or search term)
+appie order rm <order-id> <product-id> # remove product
+
+# Shopping lists
+appie list                             # list all shopping lists
+appie list show <list-id>              # show items in a list
+appie list add <list-id> <product>     # add product (by ID or search term)
+appie list rm <list-id> <product-id>   # remove product
 ```
 
 Config is stored at `~/.config/appie/config.json` (or `$XDG_CONFIG_HOME/appie/config.json`). Override with `-c`.

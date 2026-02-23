@@ -14,8 +14,8 @@ var globalOpts struct {
 	Verbose bool           `short:"v" long:"verbose" description:"Verbose output"`
 	Login   loginCommand        `command:"login" description:"Login to Albert Heijn"`
 	Search  searchCommand       `command:"search" description:"Search for products"`
-	Receipt receiptCommand      `command:"receipt" description:"List recent receipts"`
-	Order   orderCommand        `command:"order" subcommands-optional:"true" description:"Show active order contents"`
+	Receipt receiptCommand      `command:"receipt" subcommands-optional:"true" description:"List recent receipts"`
+	Order   orderCommand        `command:"order" subcommands-optional:"true" description:"List open orders"`
 	List    shoppingListCommand `command:"list" subcommands-optional:"true" description:"Show shopping lists"`
 }
 

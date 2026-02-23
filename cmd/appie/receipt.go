@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 
 	appie "github.com/gwillem/appie-go"
@@ -19,27 +17,14 @@ func trimMillis(s string) string {
 }
 
 type receiptCommand struct {
-	N    int `short:"n" default:"20" description:"Number of recent receipts to show"`
-	Args struct {
-		TransactionID string `positional-arg-name:"transaction-id"`
-	} `positional-args:"yes"`
+	Show receiptShowCommand `command:"show" description:"Show items for a receipt"`
+	N    int                `short:"n" default:"20" description:"Number of recent receipts to show"`
 }
 
 func (cmd *receiptCommand) Execute(args []string) error {
-	client, err := appie.NewWithConfig(globalOpts.Config, clientOpts()...)
+	ctx, client, err := orderSetup()
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if !client.IsAuthenticated() {
-		return fmt.Errorf("not authenticated, run 'appie login' first")
-	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
-	if cmd.Args.TransactionID != "" {
-		return showReceipt(ctx, client, cmd.Args.TransactionID)
+		return err
 	}
 	return listReceipts(ctx, client, cmd.N)
 }
@@ -61,6 +46,22 @@ func listReceipts(ctx context.Context, client *appie.Client, n int) error {
 	}
 
 	return nil
+}
+
+// show subcommand
+
+type receiptShowCommand struct {
+	Args struct {
+		TransactionID string `positional-arg-name:"transaction-id" required:"true"`
+	} `positional-args:"yes"`
+}
+
+func (cmd *receiptShowCommand) Execute(args []string) error {
+	ctx, client, err := orderSetup()
+	if err != nil {
+		return err
+	}
+	return showReceipt(ctx, client, cmd.Args.TransactionID)
 }
 
 func showReceipt(ctx context.Context, client *appie.Client, id string) error {

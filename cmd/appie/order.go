@@ -12,9 +12,9 @@ import (
 )
 
 type orderCommand struct {
-	List listCommand `command:"list" alias:"ls" description:"List all open orders"`
-	Use  useCommand  `command:"use" description:"Set a different order as active (reopens if submitted)"`
-	Add  addCommand  `command:"add" description:"Add a product to the active order"`
+	Show orderShowCommand `command:"show" description:"Show contents of an order"`
+	Add  orderAddCommand  `command:"add" description:"Add a product to an order"`
+	Rm   orderRmCommand   `command:"rm" description:"Remove a product from an order"`
 }
 
 func (cmd *orderCommand) Execute(args []string) error {
@@ -28,33 +28,21 @@ func (cmd *orderCommand) Execute(args []string) error {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
 
-	// Try active order first (summary has totals but no per-item prices)
-	var orderID int
-	var summary *appie.Order
-	if s, err := client.GetOrder(ctx); err == nil {
-		summary = s
-		orderID, _ = strconv.Atoi(s.ID)
-	} else if len(fulfillments) > 0 {
-		orderID = fulfillments[0].OrderID
-	} else {
+	if len(fulfillments) == 0 {
 		fmt.Println("No open orders")
 		return nil
 	}
 
-	// Get detailed line items with pricing
-	order, err := client.GetOrderDetails(ctx, orderID)
-	if err != nil {
-		return fmt.Errorf("failed to get order details: %w", err)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.AlignRight)
+	fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\t\n", "Order", "Status", "Delivery", "Total")
+	for _, f := range fulfillments {
+		delivery := f.Delivery.Slot.DateDisplay
+		if f.Delivery.Slot.TimeDisplay != "" {
+			delivery += "  " + f.Delivery.Slot.TimeDisplay
+		}
+		fmt.Fprintf(w, "\t%d\t%s\t%s\t%.2f\t\n", f.OrderID, f.Status, delivery, f.TotalPrice)
 	}
-
-	// Merge discount info from summary (details endpoint lacks totals)
-	if summary != nil {
-		order.TotalPrice = summary.TotalPrice
-		order.TotalDiscount = summary.TotalDiscount
-	}
-
-	f := findFulfillment(fulfillments, order.ID)
-	return printOrder(order, f)
+	return w.Flush()
 }
 
 func findFulfillment(fulfillments []appie.Fulfillment, orderID string) *appie.Fulfillment {
@@ -63,6 +51,32 @@ func findFulfillment(fulfillments []appie.Fulfillment, orderID string) *appie.Fu
 			return &fulfillments[i]
 		}
 	}
+	return nil
+}
+
+// ensureOrderOpen finds the fulfillment for orderID, validates it exists,
+// reopens the order if SUBMITTED/CONFIRMED, and sets the client's active order ID.
+func ensureOrderOpen(ctx context.Context, client *appie.Client, fulfillments []appie.Fulfillment, orderID int) error {
+	var found *appie.Fulfillment
+	for i, f := range fulfillments {
+		if f.OrderID == orderID {
+			found = &fulfillments[i]
+			break
+		}
+	}
+
+	if found == nil {
+		return fmt.Errorf("order %d not found in open orders", orderID)
+	}
+
+	if found.Status == "SUBMITTED" || found.Status == "CONFIRMED" {
+		if err := client.ReopenOrder(ctx, orderID); err != nil {
+			return fmt.Errorf("failed to reopen order: %w", err)
+		}
+		fmt.Printf("Reopened order %d (was %s)\n", orderID, found.Status)
+	}
+
+	client.SetOrderID(orderID)
 	return nil
 }
 
@@ -84,7 +98,7 @@ func printOrder(order *appie.Order, f *appie.Fulfillment) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	for i, item := range order.Items {
+	for _, item := range order.Items {
 		// Always show undiscounted price per line
 		unitPrice := item.Product.Price.Now
 		if item.Product.Price.Was > 0 {
@@ -92,7 +106,11 @@ func printOrder(order *appie.Order, f *appie.Fulfillment) error {
 		}
 		linePrice := float64(item.Quantity) * unitPrice
 
-		fmt.Fprintf(w, "%2d\t%s\t%d\t%6.2f\t%s\n", i+1, item.Product.Title, item.Quantity, linePrice, item.Product.BonusMechanism)
+		bonus := ""
+		if item.Product.BonusMechanism != "" {
+			bonus = "  " + item.Product.BonusMechanism
+		}
+		fmt.Fprintf(w, "  %d\t%s\t%s\t%d\t%6.2f%s\n", item.ProductID, item.Product.Title, item.Product.UnitSize, item.Quantity, linePrice, bonus)
 	}
 
 	// Use API-provided totals (from order summary or fulfillment)
@@ -106,117 +124,75 @@ func printOrder(order *appie.Order, f *appie.Fulfillment) error {
 		}
 	}
 
-	fmt.Fprintf(w, "\t\t\t──────\t\n")
+	fmt.Fprintf(w, "\t\t\t\t──────\n")
 	if discount > 0 {
-		fmt.Fprintf(w, "\t\t\t-%5.2f\tbonus\n", discount)
+		fmt.Fprintf(w, "\t\t\t\t-%5.2f  bonus\n", discount)
 	}
-	fmt.Fprintf(w, "\t\t%d items\t%6.2f\t\n", len(order.Items), total)
+	fmt.Fprintf(w, "\t\t\t%d items\t%6.2f\n", len(order.Items), total)
 	return w.Flush()
 }
 
-// list subcommand
+// show subcommand
 
-type listCommand struct{}
-
-func (cmd *listCommand) Execute(args []string) error {
-	ctx, client, err := orderSetup()
-	if err != nil {
-		return err
-	}
-
-	fulfillments, err := client.GetFulfillments(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get orders: %w", err)
-	}
-
-	if len(fulfillments) == 0 {
-		fmt.Println("No open orders")
-		return nil
-	}
-
-	var activeID string
-	if active, err := client.GetOrder(ctx); err == nil {
-		activeID = active.ID
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.AlignRight)
-	fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\t\n", "Order", "Status", "Delivery", "Total")
-	for _, f := range fulfillments {
-		delivery := f.Delivery.Slot.DateDisplay
-		if f.Delivery.Slot.TimeDisplay != "" {
-			delivery += "  " + f.Delivery.Slot.TimeDisplay
-		}
-		marker := " "
-		if strconv.Itoa(f.OrderID) == activeID {
-			marker = "*"
-		}
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%.2f\t\n", marker, f.OrderID, f.Status, delivery, f.TotalPrice)
-	}
-	return w.Flush()
-}
-
-// use subcommand
-
-type useCommand struct {
+type orderShowCommand struct {
 	Args struct {
 		OrderID int `positional-arg-name:"order-id" required:"true"`
 	} `positional-args:"yes"`
 }
 
-func (cmd *useCommand) Execute(args []string) error {
+func (cmd *orderShowCommand) Execute(args []string) error {
 	ctx, client, err := orderSetup()
 	if err != nil {
 		return err
 	}
-
-	orderID := cmd.Args.OrderID
 
 	fulfillments, err := client.GetFulfillments(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
 
-	var found *appie.Fulfillment
-	for i, f := range fulfillments {
-		if f.OrderID == orderID {
-			found = &fulfillments[i]
-			break
-		}
+	orderID := cmd.Args.OrderID
+
+	order, err := client.GetOrderDetails(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to get order details: %w", err)
 	}
 
-	if found == nil {
-		return fmt.Errorf("order %d not found in open orders", orderID)
+	// Try to get summary for totals
+	client.SetOrderID(orderID)
+	if summary, err := client.GetOrder(ctx); err == nil {
+		order.TotalPrice = summary.TotalPrice
+		order.TotalDiscount = summary.TotalDiscount
 	}
 
-	if found.Status == "SUBMITTED" || found.Status == "CONFIRMED" {
-		if err := client.ReopenOrder(ctx, orderID); err != nil {
-			return fmt.Errorf("failed to reopen order: %w", err)
-		}
-		fmt.Printf("Reopened order %d (was %s)\n", orderID, found.Status)
-	}
-
-	fmt.Printf("Active order: %d\n", orderID)
-	return nil
+	f := findFulfillment(fulfillments, order.ID)
+	return printOrder(order, f)
 }
 
 // add subcommand
 
-type addCommand struct {
+type orderAddCommand struct {
 	Args struct {
+		OrderID int    `positional-arg-name:"order-id" required:"true"`
 		Product string `positional-arg-name:"product" required:"true"`
 	} `positional-args:"yes"`
 	Quantity int `short:"n" long:"quantity" default:"1" description:"Quantity to add"`
 }
 
-func (cmd *addCommand) Execute(args []string) error {
+func (cmd *orderAddCommand) Execute(args []string) error {
 	ctx, client, err := orderSetup()
 	if err != nil {
 		return err
 	}
 
-	// Fetch active order to populate order ID header
-	if _, err := client.GetOrder(ctx); err != nil {
-		return fmt.Errorf("no active order: %w", err)
+	fulfillments, err := client.GetFulfillments(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get orders: %w", err)
+	}
+
+	orderID := cmd.Args.OrderID
+	if err := ensureOrderOpen(ctx, client, fulfillments, orderID); err != nil {
+		return err
 	}
 
 	product := cmd.Args.Product
@@ -245,7 +221,41 @@ func (cmd *addCommand) Execute(args []string) error {
 		return err
 	}
 
-	fmt.Printf("Added %dx %d\n", qty, productID)
+	fmt.Printf("Added %dx %d to order %d\n", qty, productID, orderID)
+	return nil
+}
+
+// rm subcommand
+
+type orderRmCommand struct {
+	Args struct {
+		OrderID   int `positional-arg-name:"order-id" required:"true"`
+		ProductID int `positional-arg-name:"product-id" required:"true"`
+	} `positional-args:"yes"`
+}
+
+func (cmd *orderRmCommand) Execute(args []string) error {
+	ctx, client, err := orderSetup()
+	if err != nil {
+		return err
+	}
+
+	fulfillments, err := client.GetFulfillments(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get orders: %w", err)
+	}
+
+	orderID := cmd.Args.OrderID
+	if err := ensureOrderOpen(ctx, client, fulfillments, orderID); err != nil {
+		return err
+	}
+
+	productID := cmd.Args.ProductID
+	if err := client.RemoveFromOrder(ctx, productID); err != nil {
+		return err
+	}
+
+	fmt.Printf("Removed %d from order %d\n", productID, orderID)
 	return nil
 }
 

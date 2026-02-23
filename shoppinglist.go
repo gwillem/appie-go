@@ -184,8 +184,8 @@ func (c *Client) AddFreeTextToShoppingList(ctx context.Context, name string, qua
 }
 
 // AddToFavoriteList adds products to a named favorite list (v3) using GraphQL.
-// Use GetShoppingLists to get the list IDs.
-func (c *Client) AddToFavoriteList(ctx context.Context, listID string, productIDs []int) error {
+// Each item's ProductID and Quantity are sent. Use GetShoppingLists to get list IDs.
+func (c *Client) AddToFavoriteList(ctx context.Context, listID string, items []ListItem) error {
 	const mutation = `mutation AddProductsToFavoriteList($favoriteListId: String!, $products: [FavoriteListProductMutation!]!) {
   favoriteListProductsAddV2(id: $favoriteListId, products: $products) {
     __typename
@@ -194,9 +194,12 @@ func (c *Client) AddToFavoriteList(ctx context.Context, listID string, productID
   }
 }`
 
-	products := make([]map[string]int, 0, len(productIDs))
-	for _, id := range productIDs {
-		products = append(products, map[string]int{"productId": id})
+	products := make([]map[string]int, 0, len(items))
+	for _, item := range items {
+		products = append(products, map[string]int{
+			"productId": item.ProductID,
+			"quantity":  max(item.Quantity, 1),
+		})
 	}
 
 	variables := map[string]any{
@@ -222,11 +225,55 @@ func (c *Client) AddToFavoriteList(ctx context.Context, listID string, productID
 	return nil
 }
 
-// RemoveFromShoppingList removes an item from the shopping list.
-func (c *Client) RemoveFromShoppingList(ctx context.Context, itemID string) error {
-	path := fmt.Sprintf("/mobile-services/lists/v3/lists/items/%s", itemID)
-	if err := c.DoRequest(ctx, http.MethodDelete, path, nil, nil); err != nil {
-		return fmt.Errorf("remove from shopping list failed: %w", err)
+// RemoveFromFavoriteList removes products from a named favorite list using GraphQL.
+// It looks up item IDs by product ID, then calls favoriteListProductsDeleteV2.
+func (c *Client) RemoveFromFavoriteList(ctx context.Context, listID string, productIDs []int) error {
+	items, err := c.GetShoppingListItems(ctx, listID)
+	if err != nil {
+		return err
+	}
+
+	want := make(map[int]bool, len(productIDs))
+	for _, id := range productIDs {
+		want[id] = true
+	}
+
+	var itemIDs []string
+	for _, item := range items {
+		if want[item.ProductID] {
+			itemIDs = append(itemIDs, item.ID)
+		}
+	}
+
+	if len(itemIDs) == 0 {
+		return fmt.Errorf("none of the specified products found in list")
+	}
+
+	const mutation = `mutation DeleteProductsFromFavoriteList($favoriteListId: String!, $itemIds: [String!]!) {
+  favoriteListProductsDeleteV2(id: $favoriteListId, itemIds: $itemIds) {
+    status
+    errorMessage
+  }
+}`
+
+	variables := map[string]any{
+		"favoriteListId": strings.ToUpper(listID),
+		"itemIds":        itemIDs,
+	}
+
+	var result struct {
+		FavoriteListProductsDeleteV2 struct {
+			Status       string `json:"status"`
+			ErrorMessage string `json:"errorMessage"`
+		} `json:"favoriteListProductsDeleteV2"`
+	}
+
+	if err := c.DoGraphQL(ctx, mutation, variables, &result); err != nil {
+		return fmt.Errorf("remove from favorite list failed: %w", err)
+	}
+
+	if result.FavoriteListProductsDeleteV2.Status != "SUCCESS" {
+		return fmt.Errorf("remove from favorite list failed: %s", result.FavoriteListProductsDeleteV2.ErrorMessage)
 	}
 
 	return nil
@@ -254,13 +301,18 @@ func (c *Client) ClearShoppingList(ctx context.Context) error {
 		return err
 	}
 
+	var productIDs []int
 	for _, item := range list.Items {
-		if err := c.RemoveFromShoppingList(ctx, item.ID); err != nil {
-			return fmt.Errorf("failed to remove item %s: %w", item.ID, err)
+		if item.ProductID > 0 {
+			productIDs = append(productIDs, item.ProductID)
 		}
 	}
 
-	return nil
+	if len(productIDs) == 0 {
+		return nil
+	}
+
+	return c.RemoveFromFavoriteList(ctx, list.ID, productIDs)
 }
 
 // ShoppingListToOrder adds all unchecked product items from the shopping list to the order.

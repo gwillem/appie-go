@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"text/tabwriter"
 
 	appie "github.com/gwillem/appie-go"
@@ -34,56 +33,26 @@ func (cmd *shoppingListCommand) Execute(args []string) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, l := range lists {
-		fmt.Fprintf(w, "  %s\t%d items\n", l.Name, l.ItemCount)
+		fmt.Fprintf(w, "  %s\t%s\t%d items\n", l.ID, l.Name, l.ItemCount)
 	}
 	return w.Flush()
 }
 
-// matchList finds a list by case-insensitive prefix match on name.
-// If name is empty and there's exactly one list, returns it as implicit default.
-func matchList(lists []appie.ShoppingList, name string) (*appie.ShoppingList, error) {
-	if name == "" {
-		if len(lists) == 1 {
-			return &lists[0], nil
-		}
-		names := make([]string, len(lists))
-		for i, l := range lists {
-			names[i] = l.Name
-		}
-		return nil, fmt.Errorf("multiple lists, specify one with -l: %s", strings.Join(names, ", "))
-	}
-
-	lower := strings.ToLower(name)
-	var matches []int
+// findList finds a list by exact UUID match.
+func findList(lists []appie.ShoppingList, id string) (*appie.ShoppingList, error) {
 	for i, l := range lists {
-		if strings.HasPrefix(strings.ToLower(l.Name), lower) {
-			matches = append(matches, i)
+		if l.ID == id {
+			return &lists[i], nil
 		}
 	}
-
-	switch len(matches) {
-	case 1:
-		return &lists[matches[0]], nil
-	case 0:
-		names := make([]string, len(lists))
-		for i, l := range lists {
-			names[i] = l.Name
-		}
-		return nil, fmt.Errorf("no list matching %q, available: %s", name, strings.Join(names, ", "))
-	default:
-		names := make([]string, len(matches))
-		for i, idx := range matches {
-			names[i] = lists[idx].Name
-		}
-		return nil, fmt.Errorf("ambiguous match %q: %s", name, strings.Join(names, ", "))
-	}
+	return nil, fmt.Errorf("list %q not found", id)
 }
 
 // show subcommand
 
 type shoppingListShowCommand struct {
 	Args struct {
-		Name string `positional-arg-name:"name" required:"true"`
+		ListID string `positional-arg-name:"list-id" required:"true"`
 	} `positional-args:"yes"`
 }
 
@@ -98,7 +67,7 @@ func (cmd *shoppingListShowCommand) Execute(args []string) error {
 		return fmt.Errorf("failed to get shopping lists: %w", err)
 	}
 
-	list, err := matchList(lists, cmd.Args.Name)
+	list, err := findList(lists, cmd.Args.ListID)
 	if err != nil {
 		return err
 	}
@@ -135,7 +104,7 @@ func (cmd *shoppingListShowCommand) Execute(args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	for i, item := range items {
+	for _, item := range items {
 		p := products[item.ProductID]
 		title := item.Name
 		unitSize := ""
@@ -150,7 +119,7 @@ func (cmd *shoppingListShowCommand) Execute(args []string) error {
 		if title == "" {
 			title = fmt.Sprintf("(product %d)", item.ProductID)
 		}
-		fmt.Fprintf(w, "%2d\t%s\t%s\t%d\t%s\n", i+1, title, unitSize, item.Quantity, price)
+		fmt.Fprintf(w, "  %d\t%s\t%s\t%d\t%s\n", item.ProductID, title, unitSize, item.Quantity, price)
 	}
 	return w.Flush()
 }
@@ -159,10 +128,10 @@ func (cmd *shoppingListShowCommand) Execute(args []string) error {
 
 type shoppingListAddCommand struct {
 	Args struct {
+		ListID  string `positional-arg-name:"list-id" required:"true"`
 		Product string `positional-arg-name:"product" required:"true"`
 	} `positional-args:"yes"`
-	Quantity int    `short:"n" long:"quantity" default:"1" description:"Quantity to add"`
-	List     string `short:"l" long:"list" description:"List name (prefix match)"`
+	Quantity int `short:"n" long:"quantity" default:"1" description:"Quantity to add"`
 }
 
 func (cmd *shoppingListAddCommand) Execute(args []string) error {
@@ -176,7 +145,7 @@ func (cmd *shoppingListAddCommand) Execute(args []string) error {
 		return fmt.Errorf("failed to get shopping lists: %w", err)
 	}
 
-	list, err := matchList(lists, cmd.List)
+	list, err := findList(lists, cmd.Args.ListID)
 	if err != nil {
 		return err
 	}
@@ -202,7 +171,7 @@ func (cmd *shoppingListAddCommand) Execute(args []string) error {
 		fmt.Printf("Found: %s\n", products[0].Title)
 	}
 
-	if err := client.AddToFavoriteList(ctx, list.ID, []int{productID}); err != nil {
+	if err := client.AddToFavoriteList(ctx, list.ID, []appie.ListItem{{ProductID: productID, Quantity: cmd.Quantity}}); err != nil {
 		return err
 	}
 
@@ -214,9 +183,9 @@ func (cmd *shoppingListAddCommand) Execute(args []string) error {
 
 type shoppingListRmCommand struct {
 	Args struct {
-		Number int `positional-arg-name:"number" required:"true"`
+		ListID    string `positional-arg-name:"list-id" required:"true"`
+		ProductID int    `positional-arg-name:"product-id" required:"true"`
 	} `positional-args:"yes"`
-	List string `short:"l" long:"list" description:"List name (prefix match)"`
 }
 
 func (cmd *shoppingListRmCommand) Execute(args []string) error {
@@ -230,30 +199,15 @@ func (cmd *shoppingListRmCommand) Execute(args []string) error {
 		return fmt.Errorf("failed to get shopping lists: %w", err)
 	}
 
-	list, err := matchList(lists, cmd.List)
+	list, err := findList(lists, cmd.Args.ListID)
 	if err != nil {
 		return err
 	}
 
-	items, err := client.GetShoppingListItems(ctx, list.ID)
-	if err != nil {
-		return fmt.Errorf("failed to get list items: %w", err)
-	}
-
-	idx := cmd.Args.Number - 1
-	if idx < 0 || idx >= len(items) {
-		return fmt.Errorf("item %d out of range (list has %d items)", cmd.Args.Number, len(items))
-	}
-
-	item := items[idx]
-	if err := client.RemoveFromShoppingList(ctx, item.ID); err != nil {
+	if err := client.RemoveFromFavoriteList(ctx, list.ID, []int{cmd.Args.ProductID}); err != nil {
 		return err
 	}
 
-	label := item.Name
-	if label == "" {
-		label = fmt.Sprintf("product %d", item.ProductID)
-	}
-	fmt.Printf("Removed #%d (%s) from %s\n", cmd.Args.Number, label, list.Name)
+	fmt.Printf("Removed %d from %s\n", cmd.Args.ProductID, list.Name)
 	return nil
 }

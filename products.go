@@ -20,30 +20,24 @@ type searchResponse struct {
 }
 
 type productResponse struct {
-	WebshopID            int             `json:"webshopId"`
-	HqID                 int             `json:"hqId"`
-	Title                string          `json:"title"`
-	Brand                string          `json:"brand"`
-	SalesUnitSize        string          `json:"salesUnitSize"`
-	UnitPriceDescription string          `json:"unitPriceDescription"`
-	Images               []imageResponse `json:"images"`
-	CurrentPrice         float64         `json:"currentPrice"`
-	PriceBeforeBonus     float64         `json:"priceBeforeBonus"`
-	IsBonus              bool            `json:"isBonus"`
-	BonusMechanism       string          `json:"bonusMechanism"`
-	MainCategory         string          `json:"mainCategory"`
-	SubCategory          string          `json:"subCategory"`
-	NutriScore           string          `json:"nutriscore"`
-	AvailableOnline      bool            `json:"availableOnline"`
-	IsPreviouslyBought   bool            `json:"isPreviouslyBought"`
-	IsOrderable          bool            `json:"isOrderable"`
-	PropertyIcons        []string        `json:"propertyIcons"`
-}
-
-type imageResponse struct {
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	URL    string `json:"url"`
+	WebshopID            int      `json:"webshopId"`
+	HqID                 int      `json:"hqId"`
+	Title                string   `json:"title"`
+	Brand                string   `json:"brand"`
+	SalesUnitSize        string   `json:"salesUnitSize"`
+	UnitPriceDescription string   `json:"unitPriceDescription"`
+	Images               []Image  `json:"images"`
+	CurrentPrice         float64  `json:"currentPrice"`
+	PriceBeforeBonus     float64  `json:"priceBeforeBonus"`
+	IsBonus              bool     `json:"isBonus"`
+	BonusMechanism       string   `json:"bonusMechanism"`
+	MainCategory         string   `json:"mainCategory"`
+	SubCategory          string   `json:"subCategory"`
+	NutriScore           string   `json:"nutriscore"`
+	AvailableOnline      bool     `json:"availableOnline"`
+	IsPreviouslyBought   bool     `json:"isPreviouslyBought"`
+	IsOrderable          bool     `json:"isOrderable"`
+	PropertyIcons        []string `json:"propertyIcons"`
 }
 
 // GraphQL query for fetching product nutritional info via tradeItem
@@ -78,15 +72,6 @@ type productNutritionResponse struct {
 }
 
 func (p *productResponse) toProduct() Product {
-	var images []Image
-	for _, img := range p.Images {
-		images = append(images, Image{
-			URL:    img.URL,
-			Width:  img.Width,
-			Height: img.Height,
-		})
-	}
-
 	price := p.CurrentPrice
 	if price == 0 {
 		price = p.PriceBeforeBonus
@@ -100,7 +85,7 @@ func (p *productResponse) toProduct() Product {
 		Category:             p.MainCategory,
 		SubCategory:          p.SubCategory,
 		Price:                Price{Now: price, Was: p.PriceBeforeBonus},
-		Images:               images,
+		Images:               p.Images,
 		NutriScore:           p.NutriScore,
 		IsBonus:              p.IsBonus,
 		BonusMechanism:       p.BonusMechanism,
@@ -224,15 +209,13 @@ func (c *Client) GetProductsByIDs(ctx context.Context, productIDs []int) ([]Prod
 
 	path := "/mobile-services/product/search/v2/products?" + params.Encode()
 
-	var result struct {
-		Products []productResponse `json:"products"`
-	}
+	var result []productResponse
 	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get products by ids failed: %w", err)
 	}
 
-	products := make([]Product, 0, len(result.Products))
-	for _, p := range result.Products {
+	products := make([]Product, 0, len(result))
+	for _, p := range result {
 		products = append(products, p.toProduct())
 	}
 

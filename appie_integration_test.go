@@ -145,6 +145,36 @@ func TestGetShoppingList(t *testing.T) {
 	}
 }
 
+func TestGetShoppingListItems(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+
+	lists, err := client.GetShoppingLists(ctx, 0)
+	if err != nil {
+		t.Fatalf("failed to get shopping lists: %v", err)
+	}
+	if len(lists) == 0 {
+		t.Skip("no shopping lists found")
+	}
+
+	for _, list := range lists {
+		t.Logf("List: %s (%s, %d items)", list.Name, list.ID, list.ItemCount)
+
+		items, err := client.GetShoppingListItems(ctx, list.ID)
+		if err != nil {
+			t.Fatalf("failed to get items for list %s: %v", list.Name, err)
+		}
+
+		for i, item := range items {
+			if i >= 5 {
+				t.Logf("  ... and %d more", len(items)-5)
+				break
+			}
+			t.Logf("  - [%s] productId=%d qty=%d", item.ID, item.ProductID, item.Quantity)
+		}
+	}
+}
+
 func TestOrderRoundTrip(t *testing.T) {
 	client := testClient(t)
 	ctx := context.Background()

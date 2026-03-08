@@ -22,7 +22,7 @@ release: test
         arch="${target#*/}"
         out="dist/appie-${os}-${arch}"
         echo "Building ${os}/${arch}..."
-        GOOS="${os}" GOARCH="${arch}" go build -ldflags="-s -w" -o "${out}" ./cmd/appie
+        GOOS="${os}" GOARCH="${arch}" go build -ldflags="-s -w -X main.version=${next}" -o "${out}" ./cmd/appie
         artifacts+=("${out}")
     done
 

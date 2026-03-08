@@ -37,6 +37,7 @@ Search products by name. Results sorted by price (low to high). Use product IDs 
 
 ```
   -n, --limit NUM    Max results (default: 20)
+      --bonus        Only show products on bonus/promotion
 ```
 
 ```
@@ -163,6 +164,21 @@ Remove a product from an order. Reopens the order if submitted.
 ```
 $ appie order rm 1234567 371880
 Removed Optimel Drinkyoghurt aardbei from order 1234567
+```
+
+### `koopjes <postcode>`
+
+Show last-chance bargains (laatste kans koopjes) at the nearest AH store. These are products nearing their best-before date with markdown pricing.
+
+```
+$ appie koopjes 3521GZ
+Vondellaan 200, Utrecht
+
+  AH Krulslamelange                   100 g   1.39 → 0.83  -40%  ×1  2026-03-08
+  AH Kokosbowl Thaise stijl          4 pers   5.89 → 1.77  -70%  ×1  2026-03-08
+  innocent Wake up shot               80 ml   1.99 → 0.60  -70%  ×7  2026-03-09
+  Campina Volle yoghurt                 1 l   1.95 → 0.59  -70%  ×2  2026-03-09
+  ...
 ```
 
 ### `list`

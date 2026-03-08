@@ -106,6 +106,10 @@ appie login
 
 # Search products
 appie search "pindakaas"
+appie search --bonus "kaas"           # only bonus products
+
+# Last-chance bargains (laatste kans koopjes)
+appie koopjes 3521GZ                  # by postal code
 
 # Receipts
 appie receipt                          # list recent receipts

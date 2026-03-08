@@ -17,6 +17,7 @@ var globalOpts struct {
 	Receipt receiptCommand      `command:"receipt" subcommands-optional:"true" description:"List recent receipts"`
 	Order   orderCommand        `command:"order" subcommands-optional:"true" description:"List open orders"`
 	List    shoppingListCommand `command:"list" subcommands-optional:"true" description:"Show shopping lists"`
+	Koopjes koopjesCommand      `command:"koopjes" description:"Show last-chance bargains at a store"`
 }
 
 func clientOpts() []appie.Option {

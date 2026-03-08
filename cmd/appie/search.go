@@ -14,7 +14,8 @@ type searchCommand struct {
 	Args struct {
 		Query string `positional-arg-name:"query" required:"true"`
 	} `positional-args:"yes"`
-	Limit int `short:"n" long:"limit" default:"20" description:"Max number of results"`
+	Limit int  `short:"n" long:"limit" default:"20" description:"Max number of results"`
+	Bonus bool `long:"bonus" description:"Only show products on bonus/promotion"`
 }
 
 func (cmd *searchCommand) Execute(args []string) error {
@@ -23,7 +24,11 @@ func (cmd *searchCommand) Execute(args []string) error {
 		return err
 	}
 
-	products, err := client.SearchProducts(ctx, cmd.Args.Query, cmd.Limit)
+	products, err := client.SearchProductsFiltered(ctx, appie.SearchOptions{
+		Query: cmd.Args.Query,
+		Limit: cmd.Limit,
+		Bonus: cmd.Bonus,
+	})
 	if err != nil {
 		return fmt.Errorf("search failed: %w", err)
 	}
@@ -41,7 +46,11 @@ func printProducts(products []appie.Product) {
 	})
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, p := range products {
-		fmt.Fprintf(w, "  %d\t%s\t%s\t€%.2f\n", p.ID, p.Title, p.UnitSize, p.Price.Now)
+		bonus := ""
+		if p.BonusMechanism != "" {
+			bonus = p.BonusMechanism
+		}
+		fmt.Fprintf(w, "  %d\t%s\t%s\t€%.2f\t%s\n", p.ID, p.Title, p.UnitSize, p.Price.Now, bonus)
 	}
 	w.Flush()
 }

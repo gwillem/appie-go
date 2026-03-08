@@ -105,29 +105,7 @@ func (p *productResponse) toProduct() Product {
 //
 //	products, err := client.SearchProducts(ctx, "melk", 10)
 func (c *Client) SearchProducts(ctx context.Context, query string, limit int) ([]Product, error) {
-	if limit <= 0 {
-		limit = 30
-	}
-
-	params := url.Values{}
-	params.Set("query", query)
-	params.Set("page", "0")
-	params.Set("size", strconv.Itoa(limit))
-	params.Set("sortOn", "RELEVANCE")
-
-	path := "/mobile-services/product/search/v2?" + params.Encode()
-
-	var result searchResponse
-	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
-		return nil, fmt.Errorf("search products failed: %w", err)
-	}
-
-	products := make([]Product, 0, len(result.Products))
-	for _, p := range result.Products {
-		products = append(products, p.toProduct())
-	}
-
-	return products, nil
+	return c.SearchProductsFiltered(ctx, SearchOptions{Query: query, Limit: limit})
 }
 
 // GetProduct retrieves a single product by its webshopId.
@@ -192,6 +170,64 @@ func (c *Client) fetchNutritionalInfo(ctx context.Context, productID int) ([]Nut
 	}
 
 	return nutritionalInfo, nil
+}
+
+// SearchOptions configures a product search.
+type SearchOptions struct {
+	Query string // Search term
+	Limit int    // Max results (default 30)
+	Bonus bool   // Only return products currently on bonus/promotion
+}
+
+// SearchProductsFiltered searches for products using the REST API.
+// When Bonus is true, over-fetches and filters client-side to return
+// up to Limit bonus products.
+func (c *Client) SearchProductsFiltered(ctx context.Context, opts SearchOptions) ([]Product, error) {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 30
+	}
+
+	var products []Product
+	page := 0
+	pageSize := limit
+	if opts.Bonus {
+		pageSize = limit * 5
+	}
+
+	for len(products) < limit {
+		params := url.Values{}
+		params.Set("query", opts.Query)
+		params.Set("page", strconv.Itoa(page))
+		params.Set("size", strconv.Itoa(pageSize))
+		params.Set("sortOn", "RELEVANCE")
+
+		path := "/mobile-services/product/search/v2?" + params.Encode()
+
+		var result searchResponse
+		if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+			return nil, fmt.Errorf("search products failed: %w", err)
+		}
+
+		for _, p := range result.Products {
+			prod := p.toProduct()
+			if opts.Bonus && !prod.IsBonus {
+				continue
+			}
+			products = append(products, prod)
+			if len(products) >= limit {
+				break
+			}
+		}
+
+		// Stop if we've exhausted all results
+		if (page+1)*pageSize >= result.Page.TotalElements {
+			break
+		}
+		page++
+	}
+
+	return products, nil
 }
 
 // GetProductsByIDs retrieves multiple products by their webshopIds in a single request.

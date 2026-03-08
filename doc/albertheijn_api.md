@@ -146,7 +146,9 @@ POST /mobile-auth/v1/auth/token/logout
 
 ## Products
 
-### Search Products
+### Search Products (REST)
+
+The REST search is the only endpoint that returns `bonusMechanism` text (e.g., "2 VOOR 5.50"). The GraphQL `SearchProducts` query does not provide this. However, REST does not support faceted filtering (e.g., bonus-only). For bonus-filtered search with mechanism text, use GraphQL for filtering + REST `Get Products by IDs` for enrichment.
 
 ```
 GET /mobile-services/product/search/v2?page=0&size=30&sortOn=RELEVANCE&taxonomyId=<id>
@@ -746,7 +748,7 @@ apollographql-client-version: 9.28-260102201630
 | GetFavoriteStore | User's favorite store | |
 | FetchRecipes | Recipe search | |
 | FetchTotalPrice | Calculate order total price | |
-| SearchProducts | Product search with facets/variants | |
+| SearchProducts | Product search with facets/variants (no bonus mechanism) | ✅ |
 | FetchEntryPoints | Home screen entry points | |
 | FetchCuratedLists | Curated shopping lists | |
 | FetchNBACard | Next best action card | |
@@ -1082,6 +1084,62 @@ query FetchProduct($productId: Int!) {
         }]
       }
     }
+  }
+}
+```
+
+#### SearchProducts
+
+Search for products with faceted filtering. See [search-api.md](search-api.md) for full details on facets, sort types, and limitations.
+
+**Important:** The GraphQL search does NOT return bonus mechanism text (e.g., "2 VOOR 5.50") for multi-buy deals. `priceV2.discount` and `priceV2.promotionLabel` are null for these products, regardless of parameters like `forcePromotionVisibility` or `periodStart`/`periodEnd`. To get bonus mechanism data, enrich results via the REST `GET /mobile-services/product/search/v2/products?ids=...` endpoint. The iOS app (v9.31) has the same limitation.
+
+The iOS app uses this fragment for product fields:
+
+```graphql
+fragment SearchProductFragment on Product {
+  ageCheck
+  availability { availabilityLabel online { status } offline { status } isOrderable }
+  brand category externalWebshopUrl hqId icons id
+  imagePack(angles: [HERO, ANGLE_2D1]) { ... }
+  isMedicalDevice isMedicine isSponsored
+  listPrice { amount }
+  priceV2 {
+    discount {
+      availability { description endDate startDate }
+      description multipleItemPromotion productCount
+      promotionType segmentId segmentType tieredOffer theme
+    }
+    now { amount }
+    was { amount }
+    promotionLabel {
+      type
+      tiers {
+        mechanism description alternateDescription originalDescription
+        amount incentiveType count freeCount actualCount
+        price percentage unit
+      }
+    }
+  }
+  salesUnitSize shopType title
+  virtualBundleProducts { quantity product { id } }
+}
+```
+
+**Variables (iOS app):**
+```json
+{
+  "includesNutritionalInfo": true,
+  "includesVariants": true,
+  "input": {
+    "extraConsents": ["ANALYSIS", "ADS_INSIDE", "ADS_OUTSIDE"],
+    "query": "kaas",
+    "searchInput": {
+      "facets": [],
+      "intent": { "intent": "ONLINE", "orderId": 959288696 },
+      "page": { "merged": false, "number": 0, "size": 30 }
+    },
+    "sortType": "RELEVANCE"
   }
 }
 ```

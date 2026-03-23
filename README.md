@@ -135,6 +135,11 @@ Config is stored at `~/.config/appie/config.json` (or `$XDG_CONFIG_HOME/appie/co
 - Rate limiting may apply. AH does not send back-off headers, so the practical rate limit is unknown.
 - **Server-side state:** Albert Heijn maintains an "active order" on the server, which determines the delivery date context for bonus promo visibility. When you call `ReopenOrder`, that order becomes the active one. Always call `RevertOrder` when done to avoid the account being stuck in a future order with incorrect bonus promos.
 
+## Projects using appie-go
+
+- [ah-mcp](https://github.com/mrserzhan/ah-mcp) — MCP server for controlling Albert Heijn from Claude and other AI assistants
+- [openclaw-skill-albert-heijn](https://github.com/markooms/openclaw-skill-albert-heijn) — OpenClaw skill that turns your AI assistant into a personal grocery planner
+
 ## License
 
 AGPLv3

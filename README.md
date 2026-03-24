@@ -139,6 +139,7 @@ Config is stored at `~/.config/appie/config.json` (or `$XDG_CONFIG_HOME/appie/co
 
 - [ah-mcp](https://github.com/mrserzhan/ah-mcp) — MCP server for controlling Albert Heijn from Claude and other AI assistants
 - [openclaw-skill-albert-heijn](https://github.com/markooms/openclaw-skill-albert-heijn) — OpenClaw skill that turns your AI assistant into a personal grocery planner
+- [weekmenu-docker](https://github.com/beninhos/weekmenu-docker) — Dockerized weekly menu planner with Albert Heijn integration
 
 ## License
 

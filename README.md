@@ -68,6 +68,26 @@ if err := client.Login(ctx); err != nil {
 
 Expired access tokens are automatically refreshed using the stored refresh token.
 
+### Order History
+
+Retrieve past (closed) orders with full product details:
+
+```go
+// List last 25 delivered orders
+orders, err := client.GetOrderHistory(ctx, 25)
+for _, o := range orders {
+    fmt.Printf("%s  €%.2f\n", o.Delivery.Slot.Date, o.TotalPrice)
+}
+
+// Full detail of a specific order (products, address, invoice)
+detail, err := client.GetFulfillmentDetail(ctx, 387946303)
+for _, line := range detail.OrderLines {
+    if line.Product != nil {
+        fmt.Printf("%dx %s\n", line.AllocatedQuantity, line.Product.Title)
+    }
+}
+```
+
 ### Receipts (Kassabonnen)
 
 Retrieve in-store purchase receipts:

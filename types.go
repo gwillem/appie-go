@@ -221,6 +221,12 @@ type Fulfillment struct {
 	TransactionCompleted bool `json:"transactionCompleted"`
 	// Modifiable indicates if items can still be added/changed.
 	Modifiable bool `json:"modifiable"`
+	// Reopenable indicates if the order can be reopened.
+	Reopenable bool `json:"reopenable"`
+	// IsSubscriptionOrder indicates if the order is part of a subscription.
+	IsSubscriptionOrder bool `json:"isSubscriptionOrder"`
+	// DeliveryMessage is the customer specified message for the delivery drivers.
+	DeliveryMessage string `json:"deliveryMessage,omitempty"`
 	// Delivery contains delivery slot and address information.
 	Delivery FulfillmentDelivery `json:"delivery"`
 }
@@ -249,6 +255,58 @@ type DeliverySlot struct {
 	StartTime string `json:"startTime"`
 	// EndTime is the slot end time (HH:MM).
 	EndTime string `json:"endTime"`
+}
+
+// FulfillmentDetail represents a full order fulfillment with order lines.
+// This is the detailed view returned by GetOrderHistory / GetOrderHistoryDetail.
+type FulfillmentDetail struct {
+	// OrderID is the numeric order identifier.
+	OrderID int `json:"orderId"`
+	// ClosingDateTime is when the order was finalized.
+	ClosingDateTime string `json:"closingDateTime,omitempty"`
+	// Cancellable indicates if the order can still be cancelled.
+	Cancellable bool `json:"cancellable"`
+	// Reopenable indicates if the order can be reopened.
+	Reopenable bool `json:"reopenable"`
+	// Delivery contains delivery details.
+	// May be empty (no slot date) for cancelled orders.
+	Delivery FulfillmentDelivery `json:"delivery"`
+	// InvoiceID is the invoice reference for this order. It may be empty in some unknown circumstances.
+	InvoiceID string `json:"invoiceId,omitempty"`
+	// OrderLines contains the products in this order.
+	OrderLines []OrderLine `json:"orderLines"`
+}
+
+// OrderLine represents a product line in a fulfilled order.
+type OrderLine struct {
+	// Quantity is the number ordered.
+	Quantity int `json:"quantity"`
+	// AllocatedQuantity is the actual quantity delivered (may differ from ordered).
+	AllocatedQuantity int `json:"allocatedQuantity"`
+	// Product contains the product details.
+	Product *OrderLineProduct `json:"product,omitempty"`
+}
+
+// OrderLineProduct contains product details as returned in order fulfillment lines.
+type OrderLineProduct struct {
+	// ID is the webshop product ID.
+	ID int `json:"id"`
+	// Title is the product name.
+	Title string `json:"title"`
+	// Brand is the product brand.
+	Brand string `json:"brand,omitempty"`
+	// SalesUnitSize is the package size (e.g., "500 g").
+	SalesUnitSize string `json:"salesUnitSize,omitempty"`
+	// Category is the product category.
+	Category string `json:"category,omitempty"`
+	// ListPrice is the base price.
+	ListPrice float64 `json:"listPrice"`
+	// CurrentPrice is the current (possibly discounted) price.
+	CurrentPrice float64 `json:"currentPrice"`
+	// WasPrice is the previous price before discount (0 if none).
+	WasPrice float64 `json:"wasPrice,omitempty"`
+	// ImageURL is the product thumbnail URL.
+	ImageURL string `json:"imageUrl,omitempty"`
 }
 
 // GraphQL request/response types

@@ -68,6 +68,26 @@ if err := client.Login(ctx); err != nil {
 
 Expired access tokens are automatically refreshed using the stored refresh token.
 
+### Order History
+
+Retrieve past (closed) orders with full product details:
+
+```go
+// List last 25 delivered orders
+orders, err := client.GetOrderHistory(ctx, 25)
+for _, o := range orders {
+    fmt.Printf("%s  €%.2f\n", o.Delivery.Slot.Date, o.TotalPrice)
+}
+
+// Full detail of a specific order (products, address, invoice)
+detail, err := client.GetFulfillmentDetail(ctx, 387946303)
+for _, line := range detail.OrderLines {
+    if line.Product != nil {
+        fmt.Printf("%dx %s\n", line.AllocatedQuantity, line.Product.Title)
+    }
+}
+```
+
 ### Receipts (Kassabonnen)
 
 Retrieve in-store purchase receipts:
@@ -117,6 +137,9 @@ appie receipt show <transaction-id>    # show items, discounts, payment
 
 # Orders
 appie order                            # list open orders
+appie order list                       # same as above
+appie order list --closed [-n 25]      # show last 25 delivered orders
+appie order list --all                 # show open + closed orders
 appie order show <order-id>            # show order contents
 appie order add <order-id> <product>   # add product (by ID or search term)
 appie order rm <order-id> <product-id> # remove product

@@ -88,26 +88,32 @@ type posReceiptDetailsResponse struct {
 	} `json:"posReceiptDetails"`
 }
 
-// GetReceipts retrieves the list of in-store receipts (kassabonnen) for the authenticated user.
+const receiptsPageSize = 100
+
+// GetReceipts retrieves all in-store receipts (kassabonnen) for the authenticated user.
+// It paginates automatically using pages of 100 until the API returns a partial page.
 func (c *Client) GetReceipts(ctx context.Context) ([]Receipt, error) {
-	vars := map[string]any{
-		"offset": 0,
-		"limit":  100,
-	}
-
-	var resp posReceiptsResponse
-	if err := c.DoGraphQL(ctx, fetchPosReceiptsQuery, vars, &resp); err != nil {
-		return nil, fmt.Errorf("get receipts failed: %w", err)
-	}
-
-	posReceipts := resp.PosReceiptsPage.PosReceipts
-	receipts := make([]Receipt, 0, len(posReceipts))
-	for _, r := range posReceipts {
-		receipts = append(receipts, Receipt{
-			TransactionID: r.ID,
-			Date:          r.DateTime,
-			TotalAmount:   r.TotalAmount.Amount,
-		})
+	var receipts []Receipt
+	for offset := 0; ; offset += receiptsPageSize {
+		vars := map[string]any{
+			"offset": offset,
+			"limit":  receiptsPageSize,
+		}
+		var resp posReceiptsResponse
+		if err := c.DoGraphQL(ctx, fetchPosReceiptsQuery, vars, &resp); err != nil {
+			return nil, fmt.Errorf("get receipts failed: %w", err)
+		}
+		page := resp.PosReceiptsPage.PosReceipts
+		for _, r := range page {
+			receipts = append(receipts, Receipt{
+				TransactionID: r.ID,
+				Date:          r.DateTime,
+				TotalAmount:   r.TotalAmount.Amount,
+			})
+		}
+		if len(page) < receiptsPageSize {
+			break
+		}
 	}
 
 	return receipts, nil

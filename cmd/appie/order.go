@@ -7,11 +7,13 @@ import (
 	"os/signal"
 	"strconv"
 	"text/tabwriter"
+	"time"
 
 	appie "github.com/gwillem/appie-go"
 )
 
 type orderCommand struct {
+	List orderListCommand `command:"list" description:"List orders (open by default)"`
 	Show orderShowCommand `command:"show" description:"Show contents of an order"`
 	Add  orderAddCommand  `command:"add" description:"Add a product to an order"`
 	Rm   orderRmCommand   `command:"rm" description:"Remove a product from an order"`
@@ -26,7 +28,7 @@ func (cmd *orderCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	fulfillments, err := client.GetFulfillments(ctx, appie.FulfillmentOpen, 0)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
@@ -36,16 +38,33 @@ func (cmd *orderCommand) Execute(args []string) error {
 		return nil
 	}
 
+	printFulfillmentList(fulfillments)
+	return nil
+}
+
+func printFulfillmentList(fulfillments []appie.Fulfillment) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', tabwriter.AlignRight)
 	fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\t\n", "Order", "Status", "Delivery", "Total")
 	for _, f := range fulfillments {
-		delivery := f.Delivery.Slot.DateDisplay
-		if f.Delivery.Slot.TimeDisplay != "" {
-			delivery += "  " + f.Delivery.Slot.TimeDisplay
+		delivery := formatNLDate(f.Delivery.Slot.Date)
+		if f.Delivery.Slot.StartTime != "" {
+			delivery += fmt.Sprintf("  %s-%s", f.Delivery.Slot.StartTime, f.Delivery.Slot.EndTime)
 		}
 		fmt.Fprintf(w, "\t%d\t%s\t%s\t%.2f\t\n", f.OrderID, f.Status, delivery, f.TotalPrice)
 	}
-	return w.Flush()
+	w.Flush()
+}
+
+// formatNLDate formats an ISO date (2006-01-02) as Dutch long form: "dinsdag 15 april 2025".
+func formatNLDate(iso string) string {
+	t, err := time.Parse("2006-01-02", iso)
+	if err != nil {
+		return iso
+	}
+	days := [...]string{"zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"}
+	months := [...]string{"", "januari", "februari", "maart", "april", "mei", "juni",
+		"juli", "augustus", "september", "oktober", "november", "december"}
+	return fmt.Sprintf("%s %d %s %d", days[t.Weekday()], t.Day(), months[t.Month()], t.Year())
 }
 
 func findFulfillment(fulfillments []appie.Fulfillment, orderID string) *appie.Fulfillment {
@@ -135,6 +154,68 @@ func printOrder(order *appie.Order, f *appie.Fulfillment) error {
 	return w.Flush()
 }
 
+// list subcommand
+
+type orderListCommand struct {
+	Open   bool `long:"open" description:"Show open orders (default)"`
+	Closed bool `long:"closed" description:"Show closed/delivered orders"`
+	All    bool `long:"all" description:"Show both open and closed orders"`
+	N      int  `short:"n" default:"25" description:"Number of orders to show"`
+}
+
+func (cmd *orderListCommand) Execute(args []string) error {
+	count := 0
+	for _, b := range []bool{cmd.Open, cmd.Closed, cmd.All} {
+		if b {
+			count++
+		}
+	}
+	if count > 1 {
+		return fmt.Errorf("--open, --closed, and --all are mutually exclusive")
+	}
+
+	ctx, client, err := orderSetup()
+	if err != nil {
+		return err
+	}
+
+	if cmd.All {
+		open, err := client.GetFulfillments(ctx, appie.FulfillmentOpen, cmd.N)
+		if err != nil {
+			return fmt.Errorf("failed to get open orders: %w", err)
+		}
+		closed, err := client.GetFulfillments(ctx, appie.FulfillmentClosed, cmd.N)
+		if err != nil {
+			return fmt.Errorf("failed to get closed orders: %w", err)
+		}
+		all := append(open, closed...)
+		if len(all) == 0 {
+			fmt.Println("No orders found")
+			return nil
+		}
+		printFulfillmentList(all)
+		return nil
+	}
+
+	status := appie.FulfillmentOpen
+	emptyMsg := "No open orders"
+	if cmd.Closed {
+		status = appie.FulfillmentClosed
+		emptyMsg = "No closed orders"
+	}
+
+	fulfillments, err := client.GetFulfillments(ctx, status, cmd.N)
+	if err != nil {
+		return fmt.Errorf("failed to get orders: %w", err)
+	}
+	if len(fulfillments) == 0 {
+		fmt.Println(emptyMsg)
+		return nil
+	}
+	printFulfillmentList(fulfillments)
+	return nil
+}
+
 // show subcommand
 
 type orderShowCommand struct {
@@ -149,19 +230,27 @@ func (cmd *orderShowCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	detail, err := client.GetFulfillmentDetail(ctx, cmd.Args.OrderID)
+	if err != nil {
+		// Fall back to REST order detail for open/active orders
+		return showOrderViaREST(ctx, client, cmd.Args.OrderID)
+	}
+
+	printFulfillmentDetail(detail)
+	return nil
+}
+
+func showOrderViaREST(ctx context.Context, client *appie.Client, orderID int) error {
+	fulfillments, err := client.GetFulfillments(ctx, appie.FulfillmentOpen, 0)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
-
-	orderID := cmd.Args.OrderID
 
 	order, err := client.GetOrderDetails(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("failed to get order details: %w", err)
 	}
 
-	// Try to get summary for totals
 	client.SetOrderID(orderID)
 	if summary, err := client.GetOrder(ctx); err == nil {
 		order.TotalPrice = summary.TotalPrice
@@ -170,6 +259,68 @@ func (cmd *orderShowCommand) Execute(args []string) error {
 
 	f := findFulfillment(fulfillments, order.ID)
 	return printOrder(order, f)
+}
+
+func printFulfillmentDetail(detail *appie.FulfillmentDetail) {
+	fmt.Printf("Order %d", detail.OrderID)
+	if detail.ClosingDateTime != "" {
+		fmt.Printf("  (closed %s)", detail.ClosingDateTime)
+	} else if detail.Delivery.Status != "" {
+		fmt.Printf("  %s", detail.Delivery.Status)
+	}
+	fmt.Println()
+
+	if detail.Delivery.Slot.Date != "" {
+		delivery := formatNLDate(detail.Delivery.Slot.Date)
+		if detail.Delivery.Slot.StartTime != "" {
+			delivery += fmt.Sprintf("  %s - %s", detail.Delivery.Slot.StartTime, detail.Delivery.Slot.EndTime)
+		}
+		fmt.Printf("Delivery: %s  %s\n", detail.Delivery.Method, delivery)
+
+		if detail.Delivery.Address.Street != "" {
+			fmt.Printf("Address:  %s %d%s, %s %s\n",
+				detail.Delivery.Address.Street,
+				detail.Delivery.Address.HouseNumber,
+				detail.Delivery.Address.HouseNumberExtra,
+				detail.Delivery.Address.PostalCode,
+				detail.Delivery.Address.City,
+			)
+		}
+		if detail.InvoiceID != "" {
+			fmt.Printf("Invoice:  %s\n", detail.InvoiceID)
+		}
+	}
+	fmt.Println()
+
+	if len(detail.OrderLines) == 0 {
+		fmt.Println("No items")
+		return
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	var total float64
+	for _, ol := range detail.OrderLines {
+		if ol.Product == nil {
+			continue
+		}
+		linePrice := float64(ol.AllocatedQuantity) * ol.Product.CurrentPrice
+		total += linePrice
+
+		qty := ol.AllocatedQuantity
+		if qty != ol.Quantity {
+			fmt.Fprintf(w, "  %d\t%s\t%s\t%d/%d\t%6.2f\n",
+				ol.Product.ID, ol.Product.Title, ol.Product.SalesUnitSize,
+				qty, ol.Quantity, linePrice)
+		} else {
+			fmt.Fprintf(w, "  %d\t%s\t%s\t%d\t%6.2f\n",
+				ol.Product.ID, ol.Product.Title, ol.Product.SalesUnitSize,
+				qty, linePrice)
+		}
+	}
+
+	fmt.Fprintf(w, "\t\t\t\t──────\n")
+	fmt.Fprintf(w, "\t\t\t%d items\t%6.2f\n", len(detail.OrderLines), total)
+	w.Flush()
 }
 
 // add subcommand
@@ -188,7 +339,7 @@ func (cmd *orderAddCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	fulfillments, err := client.GetFulfillments(ctx, appie.FulfillmentOpen, 0)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
@@ -243,7 +394,7 @@ func (cmd *orderRmCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	fulfillments, err := client.GetFulfillments(ctx, appie.FulfillmentOpen, 0)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}

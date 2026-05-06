@@ -38,7 +38,9 @@ Base URL: `https://api.ah.nl`
 | **Recipes** | FetchRecipes (GraphQL) | |
 | **Pricing** | FetchTotalPrice (GraphQL) | |
 | **Bonus Box** | Bonus box offers (GraphQL) | |
-| **Orders** (GraphQL) | Minimum value limits | |
+| **Orders** (GraphQL) | List fulfillments by status (OPEN/CLOSED) | ✅ |
+| | Full fulfillment detail with order lines | ✅ |
+| | Minimum value limits | |
 | **Recommendations** | Crosssells | |
 | | Don't forget | |
 | | Recommended recipes (GraphQL) | |

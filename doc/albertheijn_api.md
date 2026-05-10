@@ -749,6 +749,7 @@ apollographql-client-version: 9.28-260102201630
 | FetchRecipes | Recipe search | |
 | FetchTotalPrice | Calculate order total price | |
 | SearchProducts | Product search with facets/variants (no bonus mechanism) | ✅ |
+| productConvertId | Resolve POS-receipt productId → webshop productId | ✅ Implemented |
 | FetchEntryPoints | Home screen entry points | |
 | FetchCuratedLists | Curated shopping lists | |
 | FetchNBACard | Next best action card | |
@@ -1143,6 +1144,30 @@ fragment SearchProductFragment on Product {
   }
 }
 ```
+
+#### productConvertId
+
+Resolves the POS-side `productId` printed on a kassabon (`PosReceiptProduct.id`) to the AH webshop product id (the `wi<id>` slug used on ah.nl). Required because `PosReceiptProduct.externalIds` is declared but always `null` in production, and the two id spaces are distinct (e.g. `https://www.ah.nl/producten/product/wi767898` returns "product bestaat niet"; the actual webshop id for that POS line is `171607`).
+
+**Signature:** `productConvertId(sourceId: Int!): Int`
+
+Returns the webshop product id, or `-1` when no conversion exists (for example when the input is already a webshop id). The resolver does **not** validate the source id space — passing an arbitrary integer can yield a real but unrelated webshop id, so only feed it ids that came from `PosReceiptProduct.id`.
+
+GraphQL aliases let callers resolve a whole kassabon in one round-trip:
+
+```graphql
+query Convert {
+  p0: productConvertId(sourceId: 767898)
+  p1: productConvertId(sourceId: 823326)
+  p2: productConvertId(sourceId: 552022)
+}
+```
+
+```json
+{ "data": { "p0": 171607, "p1": 231878, "p2": 121453 } }
+```
+
+Wrapped in Go as `Client.ConvertPOSIDs(ctx, []int) (map[int]int, error)`; `Client.GetReceipt` calls it automatically and populates `ReceiptItem.WebshopID`.
 
 #### FetchEntryPoints
 

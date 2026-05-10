@@ -58,6 +58,31 @@ func TestGetReceiptIntegration(t *testing.T) {
 			t.Logf("  ... and %d more items", len(receipt.Items)-5)
 			break
 		}
-		t.Logf("    - %s: %.2f EUR (qty: %d)", item.Description, item.Amount, item.Quantity)
+		t.Logf("    - %s: %.2f EUR (qty: %d) wi=%d", item.Description, item.Amount, item.Quantity, item.WebshopID)
+	}
+
+	var resolved int
+	for _, item := range receipt.Items {
+		if item.WebshopID > 0 {
+			resolved++
+		}
+	}
+	if resolved == 0 {
+		t.Errorf("expected at least one ReceiptItem to have WebshopID > 0, got 0 of %d", len(receipt.Items))
+	}
+
+	for _, item := range receipt.Items {
+		if item.WebshopID == 0 {
+			continue
+		}
+		product, err := client.GetProduct(ctx, item.WebshopID)
+		if err != nil {
+			t.Fatalf("GetProduct(wi%d) for kassabon line %q: %v", item.WebshopID, item.Description, err)
+		}
+		if product.Title == "" {
+			t.Errorf("GetProduct(wi%d) returned empty title", item.WebshopID)
+		}
+		t.Logf("  resolved %d (%s) -> wi%d (%s)", item.ProductID, item.Description, item.WebshopID, product.Title)
+		break
 	}
 }

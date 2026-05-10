@@ -95,10 +95,14 @@ func showReceipt(ctx context.Context, client *appie.Client, id string) error {
 	var subtotal float64
 	for _, item := range receipt.Items {
 		subtotal += item.Amount
+		wi := ""
+		if item.WebshopID > 0 {
+			wi = fmt.Sprintf("  wi%d", item.WebshopID)
+		}
 		if item.Quantity > 1 {
-			fmt.Printf("  %dx %-30s %6.2f\n", item.Quantity, item.Description, item.Amount)
+			fmt.Printf("  %dx %-30s %6.2f%s\n", item.Quantity, item.Description, item.Amount, wi)
 		} else {
-			fmt.Printf("     %-30s %6.2f\n", item.Description, item.Amount)
+			fmt.Printf("     %-30s %6.2f%s\n", item.Description, item.Amount, wi)
 		}
 	}
 

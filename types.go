@@ -294,8 +294,16 @@ type ReceiptItem struct {
 	Amount float64 `json:"amount"`
 	// UnitPrice is the price per unit.
 	UnitPrice float64 `json:"unitPrice,omitempty"`
-	// ProductID is the webshop product ID if available.
+	// ProductID is the POS-side product id printed on the kassabon
+	// (PosReceiptProduct.id). It is NOT directly navigable on ah.nl;
+	// see WebshopID for the webshop equivalent.
 	ProductID int `json:"productId,omitempty"`
+	// WebshopID is the AH webshop product id (the "wi<id>" used on
+	// ah.nl), resolved from ProductID via productConvertId. The
+	// in-memory zero value 0 means resolution failed or the API
+	// returned its -1 sentinel; in JSON, 0 is omitted entirely
+	// (omitempty), so consumers should treat "absent" as "unresolved".
+	WebshopID int `json:"webshopId,omitempty"`
 }
 
 // ReceiptDiscount represents a discount line on a receipt (e.g. KRAS bonus).

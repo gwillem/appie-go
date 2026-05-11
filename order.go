@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -71,6 +72,7 @@ func (r *orderDetailsResponse) toOrder() Order {
 // orderSummaryResponse matches the API response for active order summary.
 type orderSummaryResponse struct {
 	ID           int    `json:"id"`
+	Hash         string `json:"hash,omitempty"`
 	State        string `json:"state"`
 	ShoppingType string `json:"shoppingType"`
 	TotalPrice   struct {
@@ -144,7 +146,10 @@ func (c *Client) GetOrder(ctx context.Context) (*Order, error) {
 	// Store order ID for subsequent requests
 	c.mu.Lock()
 	c.orderID = strconv.Itoa(result.ID)
+	c.orderHash = result.Hash
 	c.mu.Unlock()
+
+	fmt.Fprintf(os.Stderr, "[appie-go DEBUG] GetOrder: id=%s hash=%q state=%s\n", strconv.Itoa(result.ID), result.Hash, result.State)
 
 	order := result.toOrder()
 	return &order, nil
@@ -211,10 +216,135 @@ func (c *Client) AddToOrder(ctx context.Context, items []OrderItem) error {
 		"items": reqItems,
 	}
 
+	c.mu.RLock()
+	debugID := c.orderID
+	debugHash := c.orderHash
+	c.mu.RUnlock()
+	fmt.Fprintf(os.Stderr, "[appie-go DEBUG] AddToOrder: orderID=%q hash=%q items=%+v\n", debugID, debugHash, reqItems)
+
 	if err := c.DoRequest(ctx, http.MethodPut, "/mobile-services/order/v1/items?sortBy=DEFAULT", body, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "[appie-go DEBUG] AddToOrder ERROR: %v\n", err)
 		return fmt.Errorf("add to order failed: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "[appie-go DEBUG] AddToOrder SUCCESS\n")
 
+	return nil
+}
+
+const basketItemsUpdateMutation = `mutation UpdateMyListBasket($items: [BasketMutation!]!, $input: BasketInput) {
+  basketItemsUpdate(items: $items, input: $input) {
+    __typename
+    status
+  }
+}`
+
+// AddToBasket adds or updates items in the active basket using the GraphQL basketItemsUpdate mutation.
+// This is the correct method for modifying a REOPENED fulfillment order.
+func (c *Client) AddToBasket(ctx context.Context, items []OrderItem) error {
+	type basketMutation struct {
+		ID              int  `json:"id"`
+		IsStrikethrough bool `json:"isStrikethrough"`
+		NewPosition     int  `json:"newPosition"`
+		Quantity        int  `json:"quantity"`
+	}
+
+	mutations := make([]basketMutation, 0, len(items))
+	for _, item := range items {
+		mutations = append(mutations, basketMutation{
+			ID:              item.ProductID,
+			IsStrikethrough: false,
+			NewPosition:     0,
+			Quantity:        item.Quantity,
+		})
+	}
+
+	vars := map[string]any{
+		"items": mutations,
+		"input": nil,
+	}
+
+	type response struct {
+		BasketItemsUpdate struct {
+			Status string `json:"status"`
+		} `json:"basketItemsUpdate"`
+	}
+
+	var resp response
+	if err := c.DoGraphQL(ctx, basketItemsUpdateMutation, vars, &resp); err != nil {
+		return fmt.Errorf("basket update failed: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[appie-go DEBUG] AddToBasket status: %s\n", resp.BasketItemsUpdate.Status)
+	return nil
+}
+
+const basketSummaryQuery = `query FetchBasketSummary {
+  basket {
+    summary {
+      lastUserChangeDateTime
+    }
+  }
+}`
+
+// GetBasketLastModified returns the lastUserChangeDateTime from the basket summary.
+// This timestamp is required for CheckoutConfirmOrder.
+func (c *Client) GetBasketLastModified(ctx context.Context) (string, error) {
+	type response struct {
+		Basket struct {
+			Summary struct {
+				LastUserChangeDateTime string `json:"lastUserChangeDateTime"`
+			} `json:"summary"`
+		} `json:"basket"`
+	}
+
+	var resp response
+	if err := c.DoGraphQL(ctx, basketSummaryQuery, nil, &resp); err != nil {
+		return "", fmt.Errorf("get basket summary failed: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[appie-go DEBUG] GetBasketLastModified: %s\n", resp.Basket.Summary.LastUserChangeDateTime)
+	return resp.Basket.Summary.LastUserChangeDateTime, nil
+}
+
+const confirmOrderMutation = `mutation CheckoutConfirmOrder($orderId: Int!, $orderInfo: CheckoutConfirmOrderPayloadV4!) {
+  checkoutConfirmOrderV4(orderId: $orderId, orderInfo: $orderInfo) {
+    __typename
+    status
+  }
+}`
+
+// ConfirmOrder resubmits a reopened order using the checkout confirm mutation.
+// orderLastModified must be the lastUserChangeDateTime from the basket summary.
+func (c *Client) ConfirmOrder(ctx context.Context, orderID int, orderLastModified string) error {
+	type orderInfo struct {
+		Channel                       string `json:"channel"`
+		OrderLastModified             string `json:"orderLastModified"`
+		PaymentMethod                 string `json:"paymentMethod"`
+		PurchaseStampsBookletsApplied int    `json:"purchaseStampsBookletsApplied"`
+	}
+
+	vars := map[string]any{
+		"orderId": orderID,
+		"orderInfo": orderInfo{
+			Channel:                       "IOS",
+			OrderLastModified:             orderLastModified,
+			PaymentMethod:                 "PAY_AT_DELIVERY",
+			PurchaseStampsBookletsApplied: 0,
+		},
+	}
+
+	type response struct {
+		CheckoutConfirmOrderV4 struct {
+			Status string `json:"status"`
+		} `json:"checkoutConfirmOrderV4"`
+	}
+
+	var resp response
+	if err := c.DoGraphQL(ctx, confirmOrderMutation, vars, &resp); err != nil {
+		return fmt.Errorf("confirm order failed: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[appie-go DEBUG] ConfirmOrder status: %s\n", resp.CheckoutConfirmOrderV4.Status)
 	return nil
 }
 
@@ -286,6 +416,14 @@ func (c *Client) ReopenOrder(ctx context.Context, orderID int) error {
 
 	if resp.OrderReopen.Status != "SUCCESS" {
 		return fmt.Errorf("reopen order failed: %s", resp.OrderReopen.ErrorMessage)
+	}
+
+	// The reopen mutation doesn't return a hash. Set the order ID manually,
+	// then call GetOrder to fetch the active summary which includes the hash.
+	c.SetOrderID(orderID)
+
+	if _, err := c.GetOrder(ctx); err != nil {
+		return fmt.Errorf("reopen order succeeded but failed to fetch hash: %w", err)
 	}
 
 	return nil

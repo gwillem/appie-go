@@ -19,6 +19,7 @@ var globalOpts struct {
 
 	Login   loginCommand        `command:"login" description:"Login to Albert Heijn"`
 	Search  searchCommand       `command:"search" description:"Search for products"`
+	Product productCommand      `command:"product" description:"Look up product(s) by webshop ID"`
 	Receipt receiptCommand      `command:"receipt" subcommands-optional:"true" description:"List recent receipts"`
 	Order   orderCommand        `command:"order" subcommands-optional:"true" description:"List open orders"`
 	List    shoppingListCommand `command:"list" subcommands-optional:"true" description:"Show shopping lists"`

@@ -108,6 +108,12 @@ appie login
 appie search "pindakaas"
 appie search --bonus "kaas"           # only bonus products
 
+# Look up product(s) by webshop ID
+appie product 12345                    # tabular row
+appie product 12345 67890 11111        # tabular rows (missing IDs warned on stderr)
+appie product -d 12345                 # detailed view with nutrition
+appie product -d 12345 67890           # stacked detail views
+
 # Last-chance bargains (laatste kans koopjes)
 appie koopjes 3521GZ                  # by postal code
 

@@ -46,6 +46,7 @@ const fetchProductNutritionQuery = `query FetchProduct($productId: Int!) {
     id
     tradeItem {
       nutritions {
+        basisQuantity
         nutrients {
           type
           name
@@ -61,7 +62,8 @@ type productNutritionResponse struct {
 		ID        int `json:"id"`
 		TradeItem *struct {
 			Nutritions []struct {
-				Nutrients []struct {
+				BasisQuantity string `json:"basisQuantity"`
+				Nutrients     []struct {
 					Type  string `json:"type"`
 					Name  string `json:"name"`
 					Value string `json:"value"`
@@ -165,6 +167,7 @@ func (c *Client) fetchNutritionalInfo(ctx context.Context, productID int) ([]Nut
 				Name:  n.Name,
 				Type:  n.Type,
 				Value: n.Value,
+				Per:   nutrition.BasisQuantity,
 			})
 		}
 	}

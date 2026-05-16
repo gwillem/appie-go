@@ -108,8 +108,24 @@ func printProductDetail(p *appie.Product) {
 	}
 	if len(p.NutritionalInfo) > 0 {
 		fmt.Println("\n  Nutrition:")
+		var lastPer string
+		headerPrinted := false
 		for _, n := range p.NutritionalInfo {
-			fmt.Printf("    %-30s %s\n", n.Name, n.Value)
+			if !headerPrinted || n.Per != lastPer {
+				if headerPrinted {
+					fmt.Println()
+				}
+				header := n.Per
+				if header == "" {
+					header = "(unspecified basis)"
+				} else {
+					header = "per " + header
+				}
+				fmt.Printf("    %s:\n", header)
+				lastPer = n.Per
+				headerPrinted = true
+			}
+			fmt.Printf("      %-30s %s\n", n.Name, n.Value)
 		}
 	}
 }

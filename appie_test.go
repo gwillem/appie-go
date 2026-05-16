@@ -392,9 +392,16 @@ func TestFetchNutritionalInfoMock(t *testing.T) {
 					"tradeItem": map[string]any{
 						"nutritions": []map[string]any{
 							{
+								"basisQuantity": "100.0 Gram",
 								"nutrients": []map[string]any{
 									{"type": "FAT", "name": "Fat", "value": "15.5 g"},
 									{"type": "PROTEIN", "name": "Protein", "value": "8.2 g"},
+								},
+							},
+							{
+								"basisQuantity": "30.0 Gram",
+								"nutrients": []map[string]any{
+									{"type": "FAT", "name": "Fat", "value": "4.7 g"},
 								},
 							},
 						},
@@ -413,14 +420,17 @@ func TestFetchNutritionalInfoMock(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(info) != 2 {
-		t.Fatalf("expected 2 nutrients, got %d", len(info))
+	if len(info) != 3 {
+		t.Fatalf("expected 3 nutrients, got %d", len(info))
 	}
 
-	if info[0].Name != "Fat" || info[0].Type != "FAT" || info[0].Value != "15.5 g" {
+	if info[0].Name != "Fat" || info[0].Type != "FAT" || info[0].Value != "15.5 g" || info[0].Per != "100.0 Gram" {
 		t.Errorf("unexpected first nutrient: %+v", info[0])
 	}
-	if info[1].Name != "Protein" || info[1].Type != "PROTEIN" || info[1].Value != "8.2 g" {
+	if info[1].Name != "Protein" || info[1].Type != "PROTEIN" || info[1].Value != "8.2 g" || info[1].Per != "100.0 Gram" {
 		t.Errorf("unexpected second nutrient: %+v", info[1])
+	}
+	if info[2].Name != "Fat" || info[2].Per != "30.0 Gram" {
+		t.Errorf("unexpected third nutrient (serving group): %+v", info[2])
 	}
 }

@@ -26,6 +26,9 @@ type NutritionalInfo struct {
 	Type string `json:"type"`
 	// Value is the amount with unit (e.g., "15.5 g", "250 kcal").
 	Value string `json:"value"`
+	// Per is the basis the value applies to as reported by the API
+	// (e.g., "100.0 Gram", "15.0 Gram"). Empty if not provided.
+	Per string `json:"per,omitempty"`
 }
 
 // Product represents an AH product with pricing and availability information.

@@ -7,13 +7,9 @@ import (
 	"time"
 )
 
-const (
-	loginURLTemplate = "https://login.ah.nl/login?client_id=%s&response_type=code&redirect_uri=appie://login-exit"
-)
-
 // loginURL returns the URL for browser-based login.
 func (c *Client) loginURL() string {
-	return fmt.Sprintf(loginURLTemplate, c.clientID)
+	return fmt.Sprintf("%s/login?client_id=%s&response_type=code&redirect_uri=appie://login-exit", c.loginBaseURL, c.clientID)
 }
 
 // exchangeCode exchanges an authorization code for tokens.

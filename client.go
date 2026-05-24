@@ -16,11 +16,21 @@ import (
 )
 
 const (
+	defaultSite          = "nl"
 	defaultBaseURL       = "https://api.ah.nl"
+	defaultLoginBaseURL  = "https://login.ah.nl"
+	defaultApplication   = "AHWEBSHOP"
 	defaultUserAgent     = "Appie/9.28 (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)"
 	defaultClientID      = "appie-ios"
 	defaultClientVersion = "9.28"
 )
+
+func clientIDForSite(site string) string {
+	if site == "be" {
+		return "appie-be-ios"
+	}
+	return defaultClientID
+}
 
 // Client is the AH API client. It handles authentication, token management,
 // and provides methods to interact with products, orders, shopping lists, and more.
@@ -29,6 +39,8 @@ const (
 type Client struct {
 	httpClient    *http.Client
 	baseURL       string
+	loginBaseURL  string
+	application   string
 	userAgent     string
 	clientID      string
 	clientVersion string
@@ -41,10 +53,9 @@ type Client struct {
 	orderID      string // sent as appie-current-order-id header, mirroring the iOS app; the API may use this (not server-side state) to determine the active order
 	orderHash    string
 
-	configPath   string
-	loginBaseURL string       // overridable for testing; defaults to "https://login.ah.nl"
-	openBrowser  func(string) // overridable for testing; nil uses default
-	logger       *log.Logger
+	configPath  string
+	openBrowser func(string) // overridable for testing; nil uses default
+	logger      *log.Logger
 }
 
 // Option configures the client. Use With* functions to create options.
@@ -72,6 +83,25 @@ func WithTokens(accessToken, refreshToken string) Option {
 	}
 }
 
+// WithSite configures site-specific hosts and application headers.
+// Supported values: "nl" and "be". Any other value falls back to "nl".
+func WithSite(site string) Option {
+	return func(c *Client) {
+		switch strings.ToLower(strings.TrimSpace(site)) {
+		case "be":
+			c.baseURL = "https://api.ah.be"
+			c.loginBaseURL = "https://login.ah.be"
+			c.application = "AHBEWEBSHOP"
+			c.clientID = clientIDForSite("be")
+		default:
+			c.baseURL = defaultBaseURL
+			c.loginBaseURL = defaultLoginBaseURL
+			c.application = defaultApplication
+			c.clientID = clientIDForSite(defaultSite)
+		}
+	}
+}
+
 // WithLogger sets a logger for verbose request logging.
 func WithLogger(l *log.Logger) Option {
 	return func(c *Client) {
@@ -91,6 +121,8 @@ func New(opts ...Option) *Client {
 	c := &Client{
 		httpClient:    http.DefaultClient,
 		baseURL:       defaultBaseURL,
+		loginBaseURL:  defaultLoginBaseURL,
+		application:   defaultApplication,
 		userAgent:     defaultUserAgent,
 		clientID:      defaultClientID,
 		clientVersion: defaultClientVersion,
@@ -194,7 +226,7 @@ func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("x-client-name", c.clientID)
 	req.Header.Set("x-client-version", c.clientVersion)
-	req.Header.Set("x-application", "AHWEBSHOP")
+	req.Header.Set("x-application", c.application)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 

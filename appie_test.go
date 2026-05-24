@@ -69,6 +69,25 @@ func TestLoginURL(t *testing.T) {
 	}
 }
 
+func TestWithSiteBE(t *testing.T) {
+	client := New(WithSite("be"))
+	if client.baseURL != "https://api.ah.be" {
+		t.Errorf("expected BE baseURL, got %s", client.baseURL)
+	}
+	if client.loginBaseURL != "https://login.ah.be" {
+		t.Errorf("expected BE loginBaseURL, got %s", client.loginBaseURL)
+	}
+	if client.application != "AHBEWEBSHOP" {
+		t.Errorf("expected BE application, got %s", client.application)
+	}
+	if client.clientID != "appie-be-ios" {
+		t.Errorf("expected BE clientID, got %s", client.clientID)
+	}
+	if client.loginURL() != "https://login.ah.be/login?client_id=appie-be-ios&response_type=code&redirect_uri=appie://login-exit" {
+		t.Errorf("unexpected BE login URL: %s", client.loginURL())
+	}
+}
+
 func TestConfigExpiresAtRoundTrip(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "appie-test-*.json")
 	if err != nil {

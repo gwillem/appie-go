@@ -2,7 +2,6 @@ package appie
 
 import (
 	"bytes"
-	"cmp"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -50,8 +49,7 @@ func (c *Client) Login(ctx context.Context) error {
 		io.WriteString(w, loginSuccessPage)
 	})
 
-	loginBaseURL := cmp.Or(c.loginBaseURL, "https://login.ah.nl")
-	target, err := url.Parse(loginBaseURL)
+	target, err := url.Parse(c.loginBaseURL)
 	if err != nil {
 		listener.Close()
 		return fmt.Errorf("invalid login URL: %w", err)

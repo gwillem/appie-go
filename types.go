@@ -149,6 +149,74 @@ type OrderSummary struct {
 	DeliveryCost  float64 `json:"deliveryCost,omitempty"`
 }
 
+// OrderSubmissionInfo contains the current checkout readiness state for an
+// order. It is read before submitting reopened order changes.
+type OrderSubmissionInfo struct {
+	OrderID            int              `json:"orderId"`
+	State              string           `json:"state"`
+	Submitted          bool             `json:"submitted"`
+	LastUserChangeTime string           `json:"lastUserChangeTime"`
+	TotalPrice         float64          `json:"totalPrice"`
+	ValueLimits        OrderValueLimits `json:"valueLimits"`
+	ValidationErrors   int              `json:"validationErrors"`
+	HasATPError        bool             `json:"hasAtpError"`
+}
+
+// OrderValueLimits describes AH's minimum/maximum order value checks.
+type OrderValueLimits struct {
+	MinimumOrderValue MinimumOrderValue `json:"minimumOrderValue"`
+	MaximumOrderValue MaximumOrderValue `json:"maximumOrderValue"`
+	Submittable       bool              `json:"submittable"`
+}
+
+type MinimumOrderValue struct {
+	Amount   float64 `json:"amount"`
+	Deadline string  `json:"deadline,omitempty"`
+}
+
+type MaximumOrderValue struct {
+	Amount float64 `json:"amount"`
+}
+
+// PaymentMethod is an AH checkout payment method.
+type PaymentMethod string
+
+const (
+	PaymentMethodAuto          PaymentMethod = ""
+	PaymentMethodDCT           PaymentMethod = "DCT"
+	PaymentMethodPayAtDelivery PaymentMethod = "PAY_AT_DELIVERY"
+)
+
+// DCTCard is a stored debit-card-token payment card.
+type DCTCard struct {
+	CardID      string `json:"cardId"`
+	CardAlias   string `json:"cardAlias"`
+	Default     bool   `json:"default"`
+	IssuerID    string `json:"issuerId"`
+	CardArtID   string `json:"cardArtId"`
+	Status      string `json:"status"`
+	CreatedDate string `json:"createdDate,omitempty"`
+}
+
+// OrderSubmitOptions controls how a reopened order is finalized.
+type OrderSubmitOptions struct {
+	PaymentMethod PaymentMethod
+	DCTCardID     string
+	Channel       string
+}
+
+// OrderSubmitResult is returned by AH after a checkout confirm mutation.
+type OrderSubmitResult struct {
+	Status           string `json:"status"`
+	ErrorMessage     string `json:"errorMessage,omitempty"`
+	OrderID          int    `json:"orderId,omitempty"`
+	OrderState       string `json:"orderState,omitempty"`
+	Submitted        bool   `json:"submitted,omitempty"`
+	PaymentStatuses  []string
+	ValidationErrors int  `json:"validationErrors,omitempty"`
+	HasATPError      bool `json:"hasAtpError,omitempty"`
+}
+
 // FulfillmentStatus selects whether order fulfillment queries return upcoming,
 // past, or all orders.
 type FulfillmentStatus string

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	appie "github.com/gwillem/appie-go"
@@ -15,9 +16,10 @@ type orderCommand struct {
 	Closed bool `long:"closed" description:"List closed/delivered orders instead of open orders"`
 	All    bool `long:"all" description:"List all orders, including open and closed"`
 
-	Show orderShowCommand `command:"show" description:"Show contents of an order"`
-	Add  orderAddCommand  `command:"add" description:"Add a product to an order"`
-	Rm   orderRmCommand   `command:"rm" description:"Remove a product from an order"`
+	Show   orderShowCommand   `command:"show" description:"Show contents of an order"`
+	Add    orderAddCommand    `command:"add" description:"Add a product to an order"`
+	Rm     orderRmCommand     `command:"rm" description:"Remove a product from an order"`
+	Submit orderSubmitCommand `command:"submit" description:"Finalize reopened order changes"`
 }
 
 func (cmd *orderCommand) Execute(args []string) error {
@@ -294,6 +296,121 @@ func (cmd *orderRmCommand) Execute(args []string) error {
 
 	fmt.Printf("Removed %d from order %d\n", productID, orderID)
 	return nil
+}
+
+// submit subcommand
+
+type orderSubmitCommand struct {
+	Args struct {
+		OrderID int `positional-arg-name:"order-id" required:"true"`
+	} `positional-args:"yes"`
+	Payment string `long:"payment" default:"auto" description:"Payment method: auto, dct, or pay-at-delivery"`
+	Yes     bool   `long:"yes" description:"Actually submit the order; without this flag only validates readiness"`
+}
+
+func (cmd *orderSubmitCommand) Execute(args []string) error {
+	ctx, client, err := orderSetup()
+	if err != nil {
+		return err
+	}
+
+	orderID := cmd.Args.OrderID
+	info, err := client.GetOrderSubmissionInfo(ctx, orderID)
+	if err != nil {
+		return err
+	}
+
+	fulfillments, err := client.GetFulfillments(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get orders: %w", err)
+	}
+	fulfillment := findFulfillment(fulfillments, strconv.Itoa(orderID))
+
+	paymentMethod, card, err := resolveSubmitPayment(ctx, client, cmd.Payment)
+	if err != nil {
+		return err
+	}
+
+	printSubmitReadiness(info, fulfillment, paymentMethod, card)
+
+	if info.ValidationErrors > 0 || info.HasATPError {
+		return fmt.Errorf("order %d has checkout validation errors", orderID)
+	}
+	if !info.ValueLimits.Submittable {
+		return fmt.Errorf("order %d is not submittable", orderID)
+	}
+	if !cmd.Yes {
+		fmt.Println()
+		fmt.Println("Dry run only; rerun with --yes to submit.")
+		return nil
+	}
+
+	opts := appie.OrderSubmitOptions{PaymentMethod: paymentMethod}
+	if card != nil {
+		opts.DCTCardID = card.CardID
+	}
+	result, err := client.SubmitOrder(ctx, orderID, opts)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Printf("Submitted order %d: %s\n", result.OrderID, result.OrderState)
+	if len(result.PaymentStatuses) > 0 {
+		fmt.Printf("Payment: %s\n", strings.Join(result.PaymentStatuses, ", "))
+	}
+	return nil
+}
+
+func resolveSubmitPayment(ctx context.Context, client *appie.Client, value string) (appie.PaymentMethod, *appie.DCTCard, error) {
+	switch strings.ToLower(value) {
+	case "", "auto", "dct":
+		card, err := client.GetDefaultDCTCard(ctx)
+		if err != nil {
+			return "", nil, err
+		}
+		return appie.PaymentMethodDCT, card, nil
+	case "pay-at-delivery":
+		return appie.PaymentMethodPayAtDelivery, nil, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported payment method %q", value)
+	}
+}
+
+func printSubmitReadiness(info *appie.OrderSubmissionInfo, fulfillment *appie.Fulfillment, paymentMethod appie.PaymentMethod, card *appie.DCTCard) {
+	fmt.Printf("Order %d  %s\n", info.OrderID, info.State)
+	if fulfillment != nil {
+		delivery := fulfillment.Delivery.Slot.DateDisplay
+		if fulfillment.Delivery.Slot.TimeDisplay != "" {
+			delivery += "  " + fulfillment.Delivery.Slot.TimeDisplay
+		}
+		fmt.Printf("Delivery: %s\n", delivery)
+	}
+	fmt.Printf("Total: %.2f\n", info.TotalPrice)
+	fmt.Printf("Minimum: %.2f", info.ValueLimits.MinimumOrderValue.Amount)
+	if info.ValueLimits.MinimumOrderValue.Deadline != "" {
+		fmt.Printf(" by %s", info.ValueLimits.MinimumOrderValue.Deadline)
+	}
+	fmt.Printf(" (submittable: %t)\n", info.ValueLimits.Submittable)
+
+	if info.ValidationErrors == 0 && !info.HasATPError {
+		fmt.Println("Validation: ok")
+	} else {
+		fmt.Printf("Validation: %d errors, ATP error: %t\n", info.ValidationErrors, info.HasATPError)
+	}
+
+	if paymentMethod == appie.PaymentMethodDCT && card != nil {
+		label := card.CardAlias
+		if label == "" {
+			label = "default card"
+		}
+		if card.CardArtID != "" {
+			label += " (" + card.CardArtID + ")"
+		}
+		fmt.Printf("Payment: DCT %s\n", label)
+		return
+	}
+	fmt.Printf("Payment: %s\n", paymentMethod)
 }
 
 // orderSetup creates an authenticated client and context.

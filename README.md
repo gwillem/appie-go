@@ -122,6 +122,7 @@ appie order --all                      # list open and closed orders
 appie order show <order-id>            # show order contents
 appie order add <order-id> <product>   # add product (by ID or search term)
 appie order rm <order-id> <product-id> # remove product
+appie order submit <order-id>          # validate checkout; add --yes to finalize
 
 # Shopping lists
 appie list                             # list all shopping lists

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -128,6 +129,90 @@ func TestGetOrderDetails(t *testing.T) {
 	}
 	if item2.Product.BonusMechanism != "25% korting" {
 		t.Errorf("expected BonusMechanism '25%% korting', got %q", item2.Product.BonusMechanism)
+	}
+}
+
+func TestGetFulfillmentsByStatus(t *testing.T) {
+	var gotStatus string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/graphql" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if !strings.Contains(req.Query, "$status: FulfillmentStatus!") {
+			t.Errorf("query does not declare status variable: %s", req.Query)
+		}
+		gotStatus, _ = req.Variables["status"].(string)
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"orderFulfillments": map[string]any{
+					"result": []map[string]any{
+						{
+							"orderId":              384664324,
+							"statusCode":           5,
+							"statusDescription":    "Delivered",
+							"shoppingType":         "DELIVERY",
+							"transactionCompleted": true,
+							"modifiable":           false,
+							"totalPrice": map[string]any{
+								"totalPrice": map[string]any{"amount": 103.72},
+							},
+							"delivery": map[string]any{
+								"status": "DELIVERED",
+								"method": "HOME",
+								"slot": map[string]any{
+									"date":        "2026-06-16",
+									"dateDisplay": "dinsdag 16 juni",
+									"timeDisplay": "19:00 - 21:00",
+									"startTime":   "19:00",
+									"endTime":     "21:00",
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	fulfillments, err := client.GetFulfillmentsByStatus(context.Background(), FulfillmentStatusClosed)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotStatus != "CLOSED" {
+		t.Fatalf("expected status CLOSED, got %q", gotStatus)
+	}
+	if len(fulfillments) != 1 {
+		t.Fatalf("expected 1 fulfillment, got %d", len(fulfillments))
+	}
+	if fulfillments[0].OrderID != 384664324 {
+		t.Errorf("expected order 384664324, got %d", fulfillments[0].OrderID)
+	}
+	if fulfillments[0].Status != "DELIVERED" {
+		t.Errorf("expected status DELIVERED, got %q", fulfillments[0].Status)
+	}
+	if fulfillments[0].TotalPrice != 103.72 {
+		t.Errorf("expected total 103.72, got %.2f", fulfillments[0].TotalPrice)
+	}
+}
+
+func TestGetFulfillmentsByStatusRejectsInvalidStatus(t *testing.T) {
+	client := New(WithTokens("test", "test"))
+	_, err := client.GetFulfillmentsByStatus(context.Background(), FulfillmentStatus("INVALID"))
+	if err == nil {
+		t.Fatal("expected invalid status error")
 	}
 }
 

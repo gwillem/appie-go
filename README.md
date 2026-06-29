@@ -117,6 +117,8 @@ appie receipt show <transaction-id>    # show items, discounts, payment
 
 # Orders
 appie order                            # list open orders
+appie order --closed                   # list closed/delivered orders
+appie order --all                      # list open and closed orders
 appie order show <order-id>            # show order contents
 appie order add <order-id> <product>   # add product (by ID or search term)
 appie order rm <order-id> <product-id> # remove product

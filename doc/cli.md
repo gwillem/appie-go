@@ -104,13 +104,22 @@ Date:  2025-02-21T14:30:00
 
 ### `order`
 
-List all open/scheduled orders (fulfillments).
+List open/scheduled orders (fulfillments). Use `--closed` for past delivered or cancelled orders, and `--all` to include both open and closed orders.
 
 ```
 $ appie order
   Order      Status     Delivery                         Total
   1234567  SUBMITTED  dinsdag 25 feb  18:00-20:00       87.30
   1234590  SUBMITTED  vrijdag 28 feb  08:00-10:00       42.15
+
+$ appie order --closed
+  Order      Status     Delivery                         Total
+  9876543  DELIVERED  dinsdag 18 feb  18:00-20:00       64.20
+
+$ appie order --all
+  Order      Status     Delivery                         Total
+  1234567  SUBMITTED  dinsdag 25 feb  18:00-20:00       87.30
+  9876543  DELIVERED  dinsdag 18 feb  18:00-20:00       64.20
 ```
 
 #### `order show <order-id>`

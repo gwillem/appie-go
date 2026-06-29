@@ -12,6 +12,9 @@ import (
 )
 
 type orderCommand struct {
+	Closed bool `long:"closed" description:"List closed/delivered orders instead of open orders"`
+	All    bool `long:"all" description:"List all orders, including open and closed"`
+
 	Show orderShowCommand `command:"show" description:"Show contents of an order"`
 	Add  orderAddCommand  `command:"add" description:"Add a product to an order"`
 	Rm   orderRmCommand   `command:"rm" description:"Remove a product from an order"`
@@ -26,13 +29,18 @@ func (cmd *orderCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	status, emptyLabel, err := cmd.listStatus()
+	if err != nil {
+		return err
+	}
+
+	fulfillments, err := client.GetFulfillmentsByStatus(ctx, status)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
 
 	if len(fulfillments) == 0 {
-		fmt.Println("No open orders")
+		fmt.Printf("No %s orders\n", emptyLabel)
 		return nil
 	}
 
@@ -46,6 +54,19 @@ func (cmd *orderCommand) Execute(args []string) error {
 		fmt.Fprintf(w, "\t%d\t%s\t%s\t%.2f\t\n", f.OrderID, f.Status, delivery, f.TotalPrice)
 	}
 	return w.Flush()
+}
+
+func (cmd *orderCommand) listStatus() (appie.FulfillmentStatus, string, error) {
+	if cmd.Closed && cmd.All {
+		return "", "", fmt.Errorf("--closed and --all cannot be used together")
+	}
+	if cmd.Closed {
+		return appie.FulfillmentStatusClosed, "closed", nil
+	}
+	if cmd.All {
+		return appie.FulfillmentStatusAll, "all", nil
+	}
+	return appie.FulfillmentStatusOpen, "open", nil
 }
 
 func findFulfillment(fulfillments []appie.Fulfillment, orderID string) *appie.Fulfillment {
@@ -149,7 +170,7 @@ func (cmd *orderShowCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	fulfillments, err := client.GetFulfillmentsByStatus(ctx, appie.FulfillmentStatusAll)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
@@ -161,14 +182,27 @@ func (cmd *orderShowCommand) Execute(args []string) error {
 		return fmt.Errorf("failed to get order details: %w", err)
 	}
 
-	// Try to get summary for totals
-	client.SetOrderID(orderID)
-	if summary, err := client.GetOrder(ctx); err == nil {
-		order.TotalPrice = summary.TotalPrice
-		order.TotalDiscount = summary.TotalDiscount
+	f := findFulfillment(fulfillments, order.ID)
+	if f == nil {
+		closed, err := client.GetFulfillmentsByStatus(ctx, appie.FulfillmentStatusClosed)
+		if err == nil {
+			f = findFulfillment(closed, order.ID)
+		}
 	}
 
-	f := findFulfillment(fulfillments, order.ID)
+	// Try to get summary for totals on open orders. Delivered orders should use
+	// their fulfillment total; the active summary can point at a different order.
+	if f != nil && (f.Status == "DELIVERED" || f.Status == "CANCELLED") {
+		order.TotalPrice = f.TotalPrice
+		order.TotalDiscount = 0
+	} else {
+		client.SetOrderID(orderID)
+		if summary, err := client.GetOrder(ctx); err == nil {
+			order.TotalPrice = summary.TotalPrice
+			order.TotalDiscount = summary.TotalDiscount
+		}
+	}
+
 	return printOrder(order, f)
 }
 

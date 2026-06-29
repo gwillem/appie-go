@@ -327,8 +327,8 @@ func (c *Client) RevertOrder(ctx context.Context, orderID int) error {
 	return nil
 }
 
-const fulfillmentsQuery = `query OrderFulfillments {
-  orderFulfillments(status: OPEN) {
+const fulfillmentsQuery = `query OrderFulfillments($status: FulfillmentStatus!) {
+  orderFulfillments(status: $status) {
     result {
       orderId
       statusCode
@@ -385,8 +385,23 @@ type fulfillmentResult struct {
 // GetFulfillments retrieves all open (scheduled) order fulfillments.
 // These are orders that have been submitted and are awaiting delivery.
 func (c *Client) GetFulfillments(ctx context.Context) ([]Fulfillment, error) {
+	return c.GetFulfillmentsByStatus(ctx, FulfillmentStatusOpen)
+}
+
+// GetFulfillmentsByStatus retrieves order fulfillments for the requested status.
+func (c *Client) GetFulfillmentsByStatus(ctx context.Context, status FulfillmentStatus) ([]Fulfillment, error) {
+	if status == "" {
+		status = FulfillmentStatusOpen
+	}
+	switch status {
+	case FulfillmentStatusOpen, FulfillmentStatusClosed, FulfillmentStatusAll:
+	default:
+		return nil, fmt.Errorf("invalid fulfillment status %q", status)
+	}
+
 	var resp fulfillmentsResponse
-	if err := c.DoGraphQL(ctx, fulfillmentsQuery, nil, &resp); err != nil {
+	vars := map[string]any{"status": string(status)}
+	if err := c.DoGraphQL(ctx, fulfillmentsQuery, vars, &resp); err != nil {
 		return nil, fmt.Errorf("get fulfillments failed: %w", err)
 	}
 

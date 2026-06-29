@@ -149,6 +149,16 @@ type OrderSummary struct {
 	DeliveryCost  float64 `json:"deliveryCost,omitempty"`
 }
 
+// FulfillmentStatus selects whether order fulfillment queries return upcoming,
+// past, or all orders.
+type FulfillmentStatus string
+
+const (
+	FulfillmentStatusOpen   FulfillmentStatus = "OPEN"
+	FulfillmentStatusClosed FulfillmentStatus = "CLOSED"
+	FulfillmentStatusAll    FulfillmentStatus = "ALL"
+)
+
 // ShoppingList represents a user's shopping list. Users can have multiple lists.
 type ShoppingList struct {
 	// ID is a UUID identifying the list.

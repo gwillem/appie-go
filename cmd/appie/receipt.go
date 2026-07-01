@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	appie "github.com/gwillem/appie-go"
@@ -18,6 +19,7 @@ func trimMillis(s string) string {
 
 type receiptCommand struct {
 	Show receiptShowCommand `command:"show" description:"Show items for a receipt"`
+	PDF  receiptPDFCommand  `command:"pdf" description:"Download receipt as PDF"`
 	N    int                `short:"n" default:"20" description:"Number of recent receipts to show"`
 }
 
@@ -65,6 +67,38 @@ func (cmd *receiptShowCommand) Execute(args []string) error {
 		return err
 	}
 	return showReceipt(ctx, client, cmd.Args.TransactionID)
+}
+
+// pdf subcommand
+
+type receiptPDFCommand struct {
+	Output string `short:"o" long:"output" description:"Output file path (default: <id>.pdf)"`
+	Args   struct {
+		TransactionID string `positional-arg-name:"transaction-id" required:"true"`
+	} `positional-args:"yes"`
+}
+
+func (cmd *receiptPDFCommand) Execute(args []string) error {
+	ctx, client, err := orderSetup()
+	if err != nil {
+		return err
+	}
+
+	id := cmd.Args.TransactionID
+	data, err := client.GetReceiptPDF(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	out := cmd.Output
+	if out == "" {
+		out = id + ".pdf"
+	}
+	if err := os.WriteFile(out, data, 0644); err != nil {
+		return fmt.Errorf("write pdf: %w", err)
+	}
+	fmt.Printf("Saved %s (%d bytes)\n", out, len(data))
+	return nil
 }
 
 func showReceipt(ctx context.Context, client *appie.Client, id string) error {

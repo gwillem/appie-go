@@ -286,18 +286,73 @@ func (p *bonusGraphQLProduct) toProduct() Product {
 	}
 }
 
-// getBonusPeriod retrieves the current bonus period dates from metadata.
-func (c *Client) getBonusPeriod(ctx context.Context) (startDate, endDate string, err error) {
+// BonusPeriod is one Albert Heijn bonus week, as advertised by the bonus
+// metadata endpoint. AH exposes the current week and — a few days ahead — next
+// week, so a caller can look ahead by reading the second entry's StartDate.
+type BonusPeriod struct {
+	// StartDate is the first day of the bonus week ("2006-01-02"). Pass it to
+	// GetPersonalBonus to target that week.
+	StartDate string
+	// EndDate is the last day of the bonus week ("2006-01-02").
+	EndDate string
+}
+
+// GetBonusPeriods returns the bonus periods from the metadata endpoint, current
+// week first. When AH has published next week's bonus (typically a few days
+// before it starts) a second entry is present, whose StartDate is next week's
+// bonusStartDate.
+func (c *Client) GetBonusPeriods(ctx context.Context) ([]BonusPeriod, error) {
 	path := "/mobile-services/bonuspage/v3/metadata"
 	var result bonusMetadataResponse
 	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
-		return "", "", fmt.Errorf("get bonus period failed: %w", err)
+		return nil, fmt.Errorf("get bonus periods failed: %w", err)
 	}
-	if len(result.Periods) == 0 {
+	periods := make([]BonusPeriod, 0, len(result.Periods))
+	for _, p := range result.Periods {
+		periods = append(periods, BonusPeriod{StartDate: p.BonusStartDate, EndDate: p.BonusEndDate})
+	}
+	return periods, nil
+}
+
+// getBonusPeriod retrieves the current bonus period dates from metadata.
+func (c *Client) getBonusPeriod(ctx context.Context) (startDate, endDate string, err error) {
+	periods, err := c.GetBonusPeriods(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	if len(periods) == 0 {
 		return "", "", fmt.Errorf("no bonus periods available")
 	}
-	p := result.Periods[0]
-	return p.BonusStartDate, p.BonusEndDate, nil
+	return periods[0].StartDate, periods[0].EndDate, nil
+}
+
+// GetPersonalBonus retrieves the member's personalized Bonus Box offers for a
+// bonus week. bonusStartDate is the first day of the week ("2006-01-02"); pass
+// an empty string to default to the current week, or a next-week StartDate from
+// GetBonusPeriods to look ahead. Each returned Product carries the personalized
+// price and bonus mechanism.
+//
+// This requires an authenticated (non-anonymous) session — the offers are
+// member-specific — so call it after Login, not GetAnonymousToken.
+func (c *Client) GetPersonalBonus(ctx context.Context, bonusStartDate string) ([]Product, error) {
+	if bonusStartDate == "" {
+		start, _, err := c.getBonusPeriod(ctx)
+		if err != nil {
+			return nil, err
+		}
+		bonusStartDate = start
+	}
+
+	params := url.Values{}
+	params.Set("bonusStartDate", bonusStartDate)
+	path := "/mobile-services/bonuspage/v1/personal?" + params.Encode()
+
+	var result bonusSectionResponse
+	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+		return nil, fmt.Errorf("get personal bonus failed (bonusStartDate=%s): %w", bonusStartDate, err)
+	}
+
+	return collectBonusProducts(result), nil
 }
 
 // GetBonusGroupProducts retrieves the individual products within a bonus

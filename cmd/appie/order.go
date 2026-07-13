@@ -397,6 +397,21 @@ func printSubmitReadiness(info *appie.OrderSubmissionInfo, fulfillment *appie.Fu
 		fmt.Println("Validation: ok")
 	} else {
 		fmt.Printf("Validation: %d errors, ATP error: %t\n", info.ValidationErrors, info.HasATPError)
+		for _, validationError := range info.CheckoutErrors {
+			label := validationError.Code
+			if label == "" {
+				label = validationError.TypeName
+			}
+			if validationError.Message != "" {
+				fmt.Printf("  %s: %s\n", label, validationError.Message)
+			} else if label != "" {
+				fmt.Printf("  %s\n", label)
+			}
+		}
+		if info.ATPError != nil {
+			printCheckoutLimits("Stock limit", info.ATPError.StockLimits)
+			printCheckoutLimits("Order limit", info.ATPError.OrderLimits)
+		}
 	}
 
 	if paymentMethod == appie.PaymentMethodDCT && card != nil {
@@ -411,6 +426,24 @@ func printSubmitReadiness(info *appie.OrderSubmissionInfo, fulfillment *appie.Fu
 		return
 	}
 	fmt.Printf("Payment: %s\n", paymentMethod)
+}
+
+func printCheckoutLimits(label string, lines []appie.CheckoutOrderLine) {
+	for _, line := range lines {
+		productID := 0
+		productTitle := "unknown product"
+		productSize := ""
+		if line.Product != nil {
+			productID = line.Product.ID
+			productTitle = line.Product.Title
+			productSize = line.Product.UnitSize
+		}
+		if productSize != "" {
+			productTitle += " " + productSize
+		}
+		fmt.Printf("  %s: %d %s (requested %d, available %d, type %s)\n",
+			label, productID, productTitle, line.Count, line.Available, line.LimitType)
+	}
 }
 
 // orderSetup creates an authenticated client and context.

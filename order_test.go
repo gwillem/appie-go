@@ -245,8 +245,35 @@ func TestGetOrderSubmissionInfo(t *testing.T) {
 					"submittable":       true,
 				},
 				"checkoutValidateOrder": map[string]any{
-					"errors":   []any{},
-					"atpError": nil,
+					"errors": []map[string]any{
+						{
+							"__typename": "CheckoutErrorResponse",
+							"code":       "ORDER_ATP_FAILED",
+							"message":    "The order ATP check failed",
+							"data": []map[string]any{
+								{
+									"__typename": "CheckoutErrorData",
+									"errorType":  "UNKNOWN",
+									"orderLines": []map[string]any{
+										{
+											"count": 1, "available": 0, "limitType": "STOCK_LIMIT",
+											"product": map[string]any{"id": 578190, "title": "AH Borrelnoten Shanghai", "unitSize": "300 g"},
+										},
+									},
+								},
+							},
+						},
+					},
+					"atpError": map[string]any{
+						"__typename": "CheckoutATPError",
+						"stockLimits": []map[string]any{
+							{
+								"count": 1, "available": 0, "limitType": "STOCK_LIMIT",
+								"product": map[string]any{"id": 578190, "title": "AH Borrelnoten Shanghai", "unitSize": "300 g"},
+							},
+						},
+						"orderLimits": []any{},
+					},
 				},
 			},
 		})
@@ -270,6 +297,19 @@ func TestGetOrderSubmissionInfo(t *testing.T) {
 	}
 	if info.ValueLimits.MinimumOrderValue.Amount != 50 {
 		t.Fatalf("minimum = %.2f, want 50", info.ValueLimits.MinimumOrderValue.Amount)
+	}
+	if info.ValidationErrors != 1 || !info.HasATPError {
+		t.Fatalf("validation summary = %d errors, ATP %t", info.ValidationErrors, info.HasATPError)
+	}
+	if got := info.CheckoutErrors[0].Code; got != "ORDER_ATP_FAILED" {
+		t.Fatalf("checkout error code = %q", got)
+	}
+	if info.ATPError == nil || len(info.ATPError.StockLimits) != 1 {
+		t.Fatalf("ATP error = %#v", info.ATPError)
+	}
+	line := info.ATPError.StockLimits[0]
+	if line.Product == nil || line.Product.ID != 578190 || line.Available != 0 || line.Count != 1 {
+		t.Fatalf("stock-limit line = %#v", line)
 	}
 }
 
@@ -393,7 +433,7 @@ func TestSubmitOrderUsesDCTPayloadV4(t *testing.T) {
 								"submitted": true,
 							},
 							"payments": []map[string]any{
-								{"paymentStatus": "AUTHORIZED", "mutation": map[string]any{"status": "SUCCESS"}},
+								{"mutation": map[string]any{"status": "SUCCESS"}},
 							},
 						},
 					},
@@ -416,7 +456,7 @@ func TestSubmitOrderUsesDCTPayloadV4(t *testing.T) {
 	if result.OrderState != "SUBMITTED" {
 		t.Fatalf("state = %q, want SUBMITTED", result.OrderState)
 	}
-	if len(result.PaymentStatuses) != 1 || result.PaymentStatuses[0] != "AUTHORIZED" {
+	if len(result.PaymentStatuses) != 1 || result.PaymentStatuses[0] != "SUCCESS" {
 		t.Fatalf("payment statuses = %#v", result.PaymentStatuses)
 	}
 }

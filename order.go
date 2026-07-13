@@ -277,8 +277,37 @@ const orderSubmissionInfoQuery = `query OrderSubmissionInfo($orderId: Int!) {
     submittable
   }
   checkoutValidateOrder(orderId: $orderId) {
-    errors { __typename }
-    atpError { __typename }
+    errors {
+      __typename
+      code
+      message
+      data {
+        __typename
+        errorType
+        categoryName
+        orderLines {
+          count
+          available
+          limitType
+          product { id title unitSize: salesUnitSize }
+        }
+      }
+    }
+    atpError {
+      __typename
+      stockLimits {
+        count
+        available
+        limitType
+        product { id title unitSize: salesUnitSize }
+      }
+      orderLimits {
+        count
+        available
+        limitType
+        product { id title unitSize: salesUnitSize }
+      }
+    }
   }
 }`
 
@@ -286,9 +315,6 @@ const orderSubmissionInfoQuery = `query OrderSubmissionInfo($orderId: Int!) {
 func (c *Client) GetOrderSubmissionInfo(ctx context.Context, orderID int) (*OrderSubmissionInfo, error) {
 	c.SetOrderID(orderID)
 
-	type validationError struct {
-		TypeName string `json:"__typename"`
-	}
 	type submissionInfoResponse struct {
 		Order struct {
 			ID                 int    `json:"id"`
@@ -307,8 +333,8 @@ func (c *Client) GetOrderSubmissionInfo(ctx context.Context, orderID int) (*Orde
 			Submittable       bool              `json:"submittable"`
 		} `json:"orderValueLimits"`
 		CheckoutValidateOrder struct {
-			Errors   []validationError `json:"errors"`
-			ATPError *validationError  `json:"atpError"`
+			Errors   []CheckoutValidationError `json:"errors"`
+			ATPError *CheckoutATPError         `json:"atpError"`
 		} `json:"checkoutValidateOrder"`
 	}
 
@@ -331,6 +357,8 @@ func (c *Client) GetOrderSubmissionInfo(ctx context.Context, orderID int) (*Orde
 		},
 		ValidationErrors: len(resp.CheckoutValidateOrder.Errors),
 		HasATPError:      resp.CheckoutValidateOrder.ATPError != nil,
+		CheckoutErrors:   resp.CheckoutValidateOrder.Errors,
+		ATPError:         resp.CheckoutValidateOrder.ATPError,
 	}, nil
 }
 
@@ -400,7 +428,6 @@ const submitOrderMutation = `mutation CheckoutConfirmOrder($orderId: Int!, $orde
         submitted
       }
       payments {
-        paymentStatus
         mutation { status }
       }
     }
@@ -483,8 +510,7 @@ func (c *Client) SubmitOrder(ctx context.Context, orderID int, opts OrderSubmitO
 					Submitted bool   `json:"submitted"`
 				} `json:"order"`
 				Payments []struct {
-					PaymentStatus string `json:"paymentStatus"`
-					Mutation      struct {
+					Mutation struct {
 						Status string `json:"status"`
 					} `json:"mutation"`
 				} `json:"payments"`
@@ -510,8 +536,8 @@ func (c *Client) SubmitOrder(ctx context.Context, orderID int, opts OrderSubmitO
 		result.OrderState = raw.Data.Order.State
 		result.Submitted = raw.Data.Order.Submitted
 		for _, payment := range raw.Data.Payments {
-			if payment.PaymentStatus != "" {
-				result.PaymentStatuses = append(result.PaymentStatuses, payment.PaymentStatus)
+			if payment.Mutation.Status != "" {
+				result.PaymentStatuses = append(result.PaymentStatuses, payment.Mutation.Status)
 			}
 		}
 	}

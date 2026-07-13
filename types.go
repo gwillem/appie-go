@@ -152,14 +152,48 @@ type OrderSummary struct {
 // OrderSubmissionInfo contains the current checkout readiness state for an
 // order. It is read before submitting reopened order changes.
 type OrderSubmissionInfo struct {
-	OrderID            int              `json:"orderId"`
-	State              string           `json:"state"`
-	Submitted          bool             `json:"submitted"`
-	LastUserChangeTime string           `json:"lastUserChangeTime"`
-	TotalPrice         float64          `json:"totalPrice"`
-	ValueLimits        OrderValueLimits `json:"valueLimits"`
-	ValidationErrors   int              `json:"validationErrors"`
-	HasATPError        bool             `json:"hasAtpError"`
+	OrderID            int                       `json:"orderId"`
+	State              string                    `json:"state"`
+	Submitted          bool                      `json:"submitted"`
+	LastUserChangeTime string                    `json:"lastUserChangeTime"`
+	TotalPrice         float64                   `json:"totalPrice"`
+	ValueLimits        OrderValueLimits          `json:"valueLimits"`
+	ValidationErrors   int                       `json:"validationErrors"`
+	HasATPError        bool                      `json:"hasAtpError"`
+	CheckoutErrors     []CheckoutValidationError `json:"checkoutErrors,omitempty"`
+	ATPError           *CheckoutATPError         `json:"atpError,omitempty"`
+}
+
+// CheckoutValidationError describes a validation error returned before order
+// submission. Data can contain the exact affected order lines.
+type CheckoutValidationError struct {
+	TypeName string              `json:"__typename,omitempty"`
+	Code     string              `json:"code,omitempty"`
+	Message  string              `json:"message,omitempty"`
+	Data     []CheckoutErrorData `json:"data,omitempty"`
+}
+
+// CheckoutErrorData groups order lines associated with one checkout error.
+type CheckoutErrorData struct {
+	TypeName     string              `json:"__typename,omitempty"`
+	ErrorType    string              `json:"errorType,omitempty"`
+	CategoryName string              `json:"categoryName,omitempty"`
+	OrderLines   []CheckoutOrderLine `json:"orderLines,omitempty"`
+}
+
+// CheckoutATPError contains stock and order-limit failures.
+type CheckoutATPError struct {
+	TypeName    string              `json:"__typename,omitempty"`
+	StockLimits []CheckoutOrderLine `json:"stockLimits,omitempty"`
+	OrderLimits []CheckoutOrderLine `json:"orderLimits,omitempty"`
+}
+
+// CheckoutOrderLine identifies an unavailable or limited basket line.
+type CheckoutOrderLine struct {
+	Product   *Product `json:"product,omitempty"`
+	Count     int      `json:"count"`
+	Available int      `json:"available"`
+	LimitType string   `json:"limitType,omitempty"`
 }
 
 // OrderValueLimits describes AH's minimum/maximum order value checks.

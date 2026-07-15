@@ -91,27 +91,37 @@ type posReceiptDetailsResponse struct {
 
 // GetReceipts retrieves the list of in-store receipts (kassabonnen) for the authenticated user.
 func (c *Client) GetReceipts(ctx context.Context) ([]Receipt, error) {
-	vars := map[string]any{
-		"offset": 0,
-		"limit":  100,
-	}
+    const pageSize = 100
+    var receipts []Receipt
 
-	var resp posReceiptsResponse
-	if err := c.DoGraphQL(ctx, fetchPosReceiptsQuery, vars, &resp); err != nil {
-		return nil, fmt.Errorf("get receipts failed: %w", err)
-	}
+    for offset := 0; ; offset += pageSize {
+        vars := map[string]any{
+            "offset": offset,
+            "limit":  pageSize,
+        }
 
-	posReceipts := resp.PosReceiptsPage.PosReceipts
-	receipts := make([]Receipt, 0, len(posReceipts))
-	for _, r := range posReceipts {
-		receipts = append(receipts, Receipt{
-			TransactionID: r.ID,
-			Date:          r.DateTime,
-			TotalAmount:   r.TotalAmount.Amount,
-		})
-	}
+        var resp posReceiptsResponse
+        if err := c.DoGraphQL(ctx, fetchPosReceiptsQuery, vars, &resp); err != nil {
+            return nil, fmt.Errorf("get receipts failed: %w", err)
+        }
 
-	return receipts, nil
+        page := resp.PosReceiptsPage.PosReceipts
+
+        for _, r := range page {
+            receipts = append(receipts, Receipt{
+                TransactionID: r.ID,
+                Date:          r.DateTime,
+                TotalAmount:   r.TotalAmount.Amount,
+            })
+        }
+
+        // Last page reached
+        if len(page) < pageSize {
+            break
+        }
+    }
+
+    return receipts, nil
 }
 
 // GetReceipt retrieves the details of a specific in-store receipt by ID.

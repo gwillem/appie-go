@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
+	"os"
 	"strings"
 	"testing"
 )
@@ -14,20 +14,19 @@ import (
 // default backend.
 func TestWithCountrySetsClientID(t *testing.T) {
 	tests := []struct {
-		country      string
-		wantClientID string
+		country, want string
 	}{
 		{"be", "appie-be-ios"},
 		{"nl", "appie-ios"},
 		{"BE", "appie-be-ios"},
 	}
 	for _, tt := range tests {
-		c := New(WithCountry(tt.country))
-		if c.clientID != tt.wantClientID {
-			t.Errorf("WithCountry(%q): clientID = %q, want %q", tt.country, c.clientID, tt.wantClientID)
+		client := New(WithCountry(tt.country))
+		if client.clientID != tt.want {
+			t.Errorf("WithCountry(%q): expected clientID %q, got %q", tt.country, tt.want, client.clientID)
 		}
-		if c.baseURL != defaultBaseURL {
-			t.Errorf("WithCountry(%q): baseURL = %q, want default %q (host must not change)", tt.country, c.baseURL, defaultBaseURL)
+		if client.baseURL != defaultBaseURL {
+			t.Errorf("WithCountry(%q): expected default baseURL %q, got %q", tt.country, defaultBaseURL, client.baseURL)
 		}
 	}
 }
@@ -35,73 +34,102 @@ func TestWithCountrySetsClientID(t *testing.T) {
 // The assortment/pricing market is selected by the x-application header:
 // nl uses AHWEBSHOP, be uses AHBEWEBSHOP.
 func TestWithCountrySetsApplication(t *testing.T) {
-	if c := New(WithCountry("be")); c.application != "AHBEWEBSHOP" {
-		t.Errorf("be application = %q, want AHBEWEBSHOP", c.application)
+	tests := []struct {
+		country, want string
+	}{
+		{"be", "AHBEWEBSHOP"},
+		{"nl", "AHWEBSHOP"},
 	}
-	if c := New(WithCountry("nl")); c.application != "AHWEBSHOP" {
-		t.Errorf("nl application = %q, want AHWEBSHOP", c.application)
+	for _, tt := range tests {
+		client := New(WithCountry(tt.country))
+		if client.application != tt.want {
+			t.Errorf("WithCountry(%q): expected application %q, got %q", tt.country, tt.want, client.application)
+		}
 	}
 }
 
 func TestRequestCarriesApplicationHeader(t *testing.T) {
-	var got string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get("x-application")
-		w.Write([]byte(`{}`))
-	}))
-	defer srv.Close()
-
-	c := New(WithBaseURL(srv.URL), WithCountry("be"), WithTokens("a", "r"))
-	var out struct{}
-	if err := c.DoRequest(context.Background(), http.MethodGet, "/x", nil, &out); err != nil {
-		t.Fatalf("request: %v", err)
+	tests := []struct {
+		name, country, want string
+	}{
+		{"belgium", "be", "AHBEWEBSHOP"},
+		{"default stays dutch", "", "AHWEBSHOP"},
 	}
-	if got != "AHBEWEBSHOP" {
-		t.Errorf("x-application header = %q, want AHBEWEBSHOP", got)
+	for _, tt := range tests {
+		var got string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			got = r.Header.Get("x-application")
+			w.Write([]byte(`{}`))
+		}))
+
+		opts := []Option{WithBaseURL(srv.URL), WithTokens("test", "test")}
+		if tt.country != "" {
+			opts = append(opts, WithCountry(tt.country))
+		}
+		client := New(opts...)
+
+		var result map[string]string
+		if err := client.DoRequest(context.Background(), http.MethodGet, "/test-endpoint", nil, &result); err != nil {
+			t.Fatalf("%s: unexpected error: %v", tt.name, err)
+		}
+		if got != tt.want {
+			t.Errorf("%s: expected x-application %q, got %q", tt.name, tt.want, got)
+		}
+		srv.Close()
 	}
 }
 
 func TestLoginURLCarriesCountryClientID(t *testing.T) {
-	c := New(WithCountry("be"))
-	got := c.loginURL()
-	if !strings.Contains(got, "client_id=appie-be-ios") {
-		t.Errorf("loginURL() = %q, want it to contain client_id=appie-be-ios", got)
+	client := New(WithCountry("be"))
+	url := client.loginURL()
+	if !strings.Contains(url, "client_id=appie-be-ios") {
+		t.Errorf("expected login URL to contain client_id=appie-be-ios, got %s", url)
 	}
 }
 
 // A saved country is restored on load and re-selects the client_id, so callers
 // don't have to re-specify it every run.
 func TestConfigStoresAndRestoresCountry(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
+	tmpFile, err := os.CreateTemp("", "appie-test-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
 
-	c := New(WithConfigPath(path), WithCountry("be"), WithTokens("access", "refresh"))
-	if err := c.saveConfig(); err != nil {
-		t.Fatalf("saveConfig: %v", err)
+	client := New(WithConfigPath(tmpFile.Name()), WithCountry("be"), WithTokens("access", "refresh"))
+	if err := client.saveConfig(); err != nil {
+		t.Fatal(err)
 	}
 
-	c2 := New(WithConfigPath(path))
-	if err := c2.loadConfig(); err != nil {
-		t.Fatalf("loadConfig: %v", err)
+	client2 := New(WithConfigPath(tmpFile.Name()))
+	if err := client2.loadConfig(); err != nil {
+		t.Fatal(err)
 	}
-	if c2.clientID != "appie-be-ios" {
-		t.Errorf("restored clientID = %q, want appie-be-ios", c2.clientID)
+	if client2.clientID != "appie-be-ios" {
+		t.Errorf("expected restored clientID 'appie-be-ios', got %q", client2.clientID)
 	}
 }
 
 // An explicitly configured country wins over whatever is stored in the config.
 func TestExplicitCountryBeatsStored(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
+	tmpFile, err := os.CreateTemp("", "appie-test-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
 
-	saver := New(WithConfigPath(path), WithCountry("be"), WithTokens("access", "refresh"))
-	if err := saver.saveConfig(); err != nil {
-		t.Fatalf("saveConfig: %v", err)
+	client := New(WithConfigPath(tmpFile.Name()), WithCountry("be"), WithTokens("access", "refresh"))
+	if err := client.saveConfig(); err != nil {
+		t.Fatal(err)
 	}
 
-	c := New(WithConfigPath(path), WithCountry("nl"))
-	if err := c.loadConfig(); err != nil {
-		t.Fatalf("loadConfig: %v", err)
+	client2 := New(WithConfigPath(tmpFile.Name()), WithCountry("nl"))
+	if err := client2.loadConfig(); err != nil {
+		t.Fatal(err)
 	}
-	if c.clientID != "appie-ios" {
-		t.Errorf("clientID = %q, want appie-ios (explicit nl should beat stored be)", c.clientID)
+	if client2.clientID != "appie-ios" {
+		t.Errorf("expected explicit nl to beat stored be: expected clientID 'appie-ios', got %q", client2.clientID)
 	}
 }

@@ -15,6 +15,7 @@ var version = "dev"
 var globalOpts struct {
 	Config  string `short:"c" long:"config" description:"Path to config file"`
 	Verbose bool   `short:"v" long:"verbose" description:"Verbose output"`
+	Country string `long:"country" description:"Albert Heijn country: nl or be (default: nl, or last used at login)"`
 
 	Login   loginCommand        `command:"login" description:"Login to Albert Heijn"`
 	Search  searchCommand       `command:"search" description:"Search for products"`
@@ -27,6 +28,9 @@ var globalOpts struct {
 
 func clientOpts() []appie.Option {
 	opts := []appie.Option{appie.WithConfigPath(globalOpts.Config)}
+	if globalOpts.Country != "" {
+		opts = append(opts, appie.WithCountry(globalOpts.Country))
+	}
 	if globalOpts.Verbose {
 		opts = append(opts, appie.WithLogger(log.New(os.Stderr, "", log.Ltime)))
 	}

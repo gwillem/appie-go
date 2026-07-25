@@ -2,24 +2,34 @@
 
 ## Context
 
-appie-go targets the Albert Heijn Netherlands market. The data API works for
-Belgium unmodified — the same backend serves both markets. The gap was **login**:
-a Belgian member could not authenticate.
+appie-go targets the Albert Heijn Netherlands market. Belgium (ah.be) runs on the
+same hosts/backend, but two request parameters select the market — and appie-go
+hardcoded the Dutch values, so Belgian members got NL login rejections and the NL
+assortment/pricing.
 
-Root cause (verified against the live login page): the market is selected by the
-OAuth **`client_id`**, not by the host. appie-go sent `client_id=appie-ios` (the
-Dutch app), so AH validated credentials against the **Netherlands** member
-directory and rejected Belgian accounts with "niet geldig voor Albert Heijn
-Nederland". The Belgian app uses **`client_id=appie-be-ios`**.
+Root causes, both verified live (login page + a capture of the real ah.be iOS app):
 
-Confirmed the host is irrelevant: `login.ah.nl?client_id=appie-be-ios` serves the
-Belgian login, and `api.ah.nl` issues tokens for `appie-be-ios`. So only the
-client_id needs to change; the API and login hosts stay on the default backend.
+1. **Login** — the market is selected by the OAuth **`client_id`**. appie-go sent
+   `appie-ios` (Dutch app), so AH validated credentials against the **Netherlands**
+   member directory and rejected Belgian accounts ("niet geldig voor Albert Heijn
+   Nederland"). The Belgian app uses **`appie-be-ios`**.
+2. **Assortment/pricing** — selected by the **`x-application`** header. appie-go
+   sent `AHWEBSHOP` (NL), so search/bonus returned the Dutch catalog even for a
+   Belgian member. The Belgian app sends **`AHBEWEBSHOP`**. Verified: `roggebrood`
+   returns 9 NL hits under AHWEBSHOP vs 4 BE hits under AHBEWEBSHOP, matching ah.be
+   exactly.
+
+The hosts are irrelevant (`login.ah.nl?client_id=appie-be-ios` serves the Belgian
+login; `api.ah.nl` + `AHBEWEBSHOP` returns the Belgian catalog), so only these two
+parameters change; API/login hosts stay on the default backend.
 
 ## What
 
-- Add `WithCountry(country string) Option` selecting the market by client_id:
-  `"nl"` -> `appie-ios` (default), `"be"` -> `appie-be-ios`. Case-insensitive.
+- Add `WithCountry(country string) Option` selecting the market by both
+  parameters: `"nl"` (default) -> `appie-ios` / `AHWEBSHOP`; `"be"` ->
+  `appie-be-ios` / `AHBEWEBSHOP`. Case-insensitive.
+- Route the `x-application` header and the bonus `application` query param through
+  the configured value instead of the hardcoded `AHWEBSHOP`.
 - Persist the chosen country in the config file so it need not be repeated;
   restore it on load. An explicit `WithCountry` still wins over the stored value
   (explicit > stored > nl default).
@@ -27,13 +37,14 @@ client_id needs to change; the API and login hosts stay on the default backend.
 
 ## Out of scope
 
-- Switching API/login hosts per country (unnecessary — client_id is the switch).
+- Switching API/login hosts per country (unnecessary — the two params are the switch).
 - Automated checkout / delivery slots / payment.
 
 ## Done when
 
-- `New(WithCountry("be"))` sets `clientID == "appie-be-ios"`; `"nl"` -> `appie-ios`;
-  the API/login hosts are unchanged.
-- `loginURL()` carries the country's client_id.
+- `New(WithCountry("be"))` sets `clientID == "appie-be-ios"` and
+  `application == "AHBEWEBSHOP"`; `"nl"` -> `appie-ios` / `AHWEBSHOP`; hosts unchanged.
+- Requests carry the country's `x-application` header; `loginURL()` carries its client_id.
+- `SearchProducts` under `be` returns the Belgian assortment/pricing.
 - Country round-trips through the config; an explicit country beats the stored one.
 - `appie --country be login` reaches the Belgian login; existing suite stays green.

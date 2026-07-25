@@ -1,6 +1,9 @@
 package appie
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,6 +29,35 @@ func TestWithCountrySetsClientID(t *testing.T) {
 		if c.baseURL != defaultBaseURL {
 			t.Errorf("WithCountry(%q): baseURL = %q, want default %q (host must not change)", tt.country, c.baseURL, defaultBaseURL)
 		}
+	}
+}
+
+// The assortment/pricing market is selected by the x-application header:
+// nl uses AHWEBSHOP, be uses AHBEWEBSHOP.
+func TestWithCountrySetsApplication(t *testing.T) {
+	if c := New(WithCountry("be")); c.application != "AHBEWEBSHOP" {
+		t.Errorf("be application = %q, want AHBEWEBSHOP", c.application)
+	}
+	if c := New(WithCountry("nl")); c.application != "AHWEBSHOP" {
+		t.Errorf("nl application = %q, want AHWEBSHOP", c.application)
+	}
+}
+
+func TestRequestCarriesApplicationHeader(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("x-application")
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	c := New(WithBaseURL(srv.URL), WithCountry("be"), WithTokens("a", "r"))
+	var out struct{}
+	if err := c.DoRequest(context.Background(), http.MethodGet, "/x", nil, &out); err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if got != "AHBEWEBSHOP" {
+		t.Errorf("x-application header = %q, want AHBEWEBSHOP", got)
 	}
 }
 

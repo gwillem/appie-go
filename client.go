@@ -20,6 +20,7 @@ const (
 	defaultUserAgent     = "Appie/9.28 (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)"
 	defaultClientID      = "appie-ios"
 	defaultClientVersion = "9.28"
+	defaultApplication   = "AHWEBSHOP"
 )
 
 // Client is the AH API client. It handles authentication, token management,
@@ -30,6 +31,7 @@ type Client struct {
 	httpClient    *http.Client
 	baseURL       string
 	country       string
+	application   string
 	userAgent     string
 	clientID      string
 	clientVersion string
@@ -66,20 +68,23 @@ func WithBaseURL(url string) Option {
 }
 
 // WithCountry targets a country's Albert Heijn market by ISO country code. The
-// market is selected by the OAuth client_id ("nl" -> appie-ios, the default;
-// "be" -> appie-be-ios); the API and login hosts are shared across markets. The
-// code is case-insensitive.
+// market is selected by two request parameters: the OAuth client_id (login) and
+// the x-application header (assortment/pricing). "nl" (default) uses appie-ios /
+// AHWEBSHOP; "be" uses appie-be-ios / AHBEWEBSHOP. The API and login hosts are
+// shared across markets. The code is case-insensitive.
 func WithCountry(country string) Option {
 	return func(c *Client) {
 		c.applyCountry(country)
 	}
 }
 
-// applyCountry sets the country code and selects the matching client_id. Used
-// by WithCountry and by loadConfig when restoring a stored country.
+// applyCountry sets the country code and selects the matching client_id and
+// application. Used by WithCountry and by loadConfig when restoring a stored
+// country.
 func (c *Client) applyCountry(country string) {
 	c.country = strings.ToLower(country)
 	c.clientID = clientIDForCountry(c.country)
+	c.application = applicationForCountry(c.country)
 }
 
 // clientIDForCountry returns the OAuth client_id that selects the given
@@ -90,6 +95,17 @@ func clientIDForCountry(country string) string {
 		return "appie-be-ios"
 	default:
 		return defaultClientID
+	}
+}
+
+// applicationForCountry returns the x-application value that selects the given
+// country's assortment and pricing. Unknown codes fall back to the NL webshop.
+func applicationForCountry(country string) string {
+	switch strings.ToLower(country) {
+	case "be":
+		return "AHBEWEBSHOP"
+	default:
+		return defaultApplication
 	}
 }
 
@@ -120,6 +136,7 @@ func New(opts ...Option) *Client {
 	c := &Client{
 		httpClient:    http.DefaultClient,
 		baseURL:       defaultBaseURL,
+		application:   defaultApplication,
 		userAgent:     defaultUserAgent,
 		clientID:      defaultClientID,
 		clientVersion: defaultClientVersion,
@@ -230,7 +247,7 @@ func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("x-client-name", c.clientID)
 	req.Header.Set("x-client-version", c.clientVersion)
-	req.Header.Set("x-application", "AHWEBSHOP")
+	req.Header.Set("x-application", c.application)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
 

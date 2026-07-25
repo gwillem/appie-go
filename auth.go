@@ -11,7 +11,8 @@ const (
 	loginURLTemplate = "https://login.ah.nl/login?client_id=%s&response_type=code&redirect_uri=appie://login-exit"
 )
 
-// loginURL returns the URL for browser-based login.
+// loginURL returns the URL for browser-based login. The market is selected by
+// the client_id, so the same host serves both nl and be.
 func (c *Client) loginURL() string {
 	return fmt.Sprintf(loginURLTemplate, c.clientID)
 }

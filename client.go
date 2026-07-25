@@ -29,6 +29,7 @@ const (
 type Client struct {
 	httpClient    *http.Client
 	baseURL       string
+	country       string
 	userAgent     string
 	clientID      string
 	clientVersion string
@@ -61,6 +62,34 @@ func WithHTTPClient(hc *http.Client) Option {
 func WithBaseURL(url string) Option {
 	return func(c *Client) {
 		c.baseURL = url
+	}
+}
+
+// WithCountry targets a country's Albert Heijn market by ISO country code. The
+// market is selected by the OAuth client_id ("nl" -> appie-ios, the default;
+// "be" -> appie-be-ios); the API and login hosts are shared across markets. The
+// code is case-insensitive.
+func WithCountry(country string) Option {
+	return func(c *Client) {
+		c.applyCountry(country)
+	}
+}
+
+// applyCountry sets the country code and selects the matching client_id. Used
+// by WithCountry and by loadConfig when restoring a stored country.
+func (c *Client) applyCountry(country string) {
+	c.country = strings.ToLower(country)
+	c.clientID = clientIDForCountry(c.country)
+}
+
+// clientIDForCountry returns the OAuth client_id that selects the given
+// country's Albert Heijn market. Unknown codes fall back to the NL client.
+func clientIDForCountry(country string) string {
+	switch strings.ToLower(country) {
+	case "be":
+		return "appie-be-ios"
+	default:
+		return defaultClientID
 	}
 }
 
@@ -156,6 +185,12 @@ func (c *Client) loadConfig() error {
 	c.expiresAt = cfg.ExpiresAt
 	c.mu.Unlock()
 
+	// Adopt the stored country only if one wasn't already set explicitly (e.g.
+	// via WithCountry from a --country flag), so an explicit choice always wins.
+	if cfg.Country != "" && c.country == "" {
+		c.applyCountry(cfg.Country)
+	}
+
 	return nil
 }
 
@@ -171,6 +206,7 @@ func (c *Client) saveConfig() error {
 		RefreshToken: c.refreshToken,
 		MemberID:     c.memberID,
 		ExpiresAt:    c.expiresAt,
+		Country:      c.country,
 	}
 	c.mu.RUnlock()
 

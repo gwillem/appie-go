@@ -16,6 +16,7 @@ type config struct {
 	RefreshToken string    `json:"refresh_token"`
 	MemberID     string    `json:"member_id,omitempty"`
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	Country      string    `json:"country,omitempty"`
 }
 
 // NutritionalInfo represents a single nutrient value for a product.

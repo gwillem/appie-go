@@ -88,7 +88,7 @@ func (c *Client) getBonusMetadata(ctx context.Context) ([]string, error) {
 // getBonusSection retrieves bonus products for a single category.
 func (c *Client) getBonusSection(ctx context.Context, category string) ([]Product, error) {
 	params := url.Values{}
-	params.Set("application", "AHWEBSHOP")
+	params.Set("application", c.application)
 	params.Set("date", time.Now().Format("2006-01-02"))
 	params.Set("promotionType", "NATIONAL")
 	params.Set("category", category)
@@ -137,7 +137,7 @@ func (c *Client) GetBonusProducts(ctx context.Context) ([]Product, error) {
 // These are typically the best or most promoted deals of the week.
 func (c *Client) GetSpotlightBonusProducts(ctx context.Context) ([]Product, error) {
 	params := url.Values{}
-	params.Set("application", "AHWEBSHOP")
+	params.Set("application", c.application)
 	params.Set("date", time.Now().Format("2006-01-02"))
 
 	path := "/mobile-services/bonuspage/v2/section/spotlight?" + params.Encode()

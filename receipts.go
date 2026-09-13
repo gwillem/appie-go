@@ -2,9 +2,16 @@ package appie
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 )
+
+const fetchPosReceiptPdfQuery = `query FetchPosReceiptPdf($id: String!) {
+	posReceiptPdf(id: $id) {
+		pdfBase64
+	}
+}`
 
 const fetchPosReceiptsQuery = `query FetchPosReceipts($offset: Int!, $limit: Int!) {
 	posReceiptsPage(pagination: {offset: $offset, limit: $limit}) {
@@ -175,6 +182,34 @@ func (c *Client) GetReceipt(ctx context.Context, id string) (*Receipt, error) {
 		Discounts:     discounts,
 		Payments:      payments,
 	}, nil
+}
+
+type posReceiptPdfResponse struct {
+	PosReceiptPdf struct {
+		PdfBase64 string `json:"pdfBase64"`
+	} `json:"posReceiptPdf"`
+}
+
+// GetReceiptPDF fetches the PDF for an in-store receipt by ID and returns the
+// decoded PDF bytes. The PDF can be written directly to a file or HTTP response.
+func (c *Client) GetReceiptPDF(ctx context.Context, id string) ([]byte, error) {
+	vars := map[string]any{"id": id}
+
+	var resp posReceiptPdfResponse
+	if err := c.DoGraphQL(ctx, fetchPosReceiptPdfQuery, vars, &resp); err != nil {
+		return nil, fmt.Errorf("get receipt pdf: %w", err)
+	}
+
+	if resp.PosReceiptPdf.PdfBase64 == "" {
+		return nil, fmt.Errorf("get receipt pdf: no pdf returned for id %s", id)
+	}
+
+	data, err := base64.StdEncoding.DecodeString(resp.PosReceiptPdf.PdfBase64)
+	if err != nil {
+		return nil, fmt.Errorf("get receipt pdf: decode base64: %w", err)
+	}
+
+	return data, nil
 }
 
 // ConvertPOSIDs maps POS-receipt productIds (the integer found on

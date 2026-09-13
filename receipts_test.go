@@ -232,6 +232,49 @@ func TestGetReceiptResolvesWebshopID(t *testing.T) {
 	}
 }
 
+func TestGetReceiptPDF(t *testing.T) {
+	// "hello pdf" base64-encoded
+	const payload = "aGVsbG8gcGRm"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req, _ := readGraphQLRequest(t, r)
+		if !strings.Contains(req.Query, "posReceiptPdf") {
+			t.Fatalf("expected posReceiptPdf query, got: %s", req.Query)
+		}
+		if req.Variables["id"] != "txn-001" {
+			t.Fatalf("expected id=txn-001, got: %v", req.Variables["id"])
+		}
+		json.NewEncoder(w).Encode(graphQLResponse[json.RawMessage]{
+			Data: json.RawMessage(`{"posReceiptPdf":{"pdfBase64":"` + payload + `"}}`),
+		})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL))
+	data, err := client.GetReceiptPDF(context.Background(), "txn-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "hello pdf" {
+		t.Errorf("got %q, want %q", string(data), "hello pdf")
+	}
+}
+
+func TestGetReceiptPDFEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(graphQLResponse[json.RawMessage]{
+			Data: json.RawMessage(`{"posReceiptPdf":{"pdfBase64":""}}`),
+		})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL))
+	_, err := client.GetReceiptPDF(context.Background(), "txn-missing")
+	if err == nil {
+		t.Fatal("expected error for empty pdfBase64, got nil")
+	}
+}
+
 func TestConvertPOSIDsBatchShape(t *testing.T) {
 	var captured string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

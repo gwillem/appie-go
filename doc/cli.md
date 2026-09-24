@@ -104,31 +104,55 @@ Date:  2025-02-21T14:30:00
 
 ### `order`
 
-List all open/scheduled orders (fulfillments).
+Shorthand for `order list` — shows open orders by default.
 
 ```
 $ appie order
-  Order      Status     Delivery                         Total
-  1234567  SUBMITTED  dinsdag 25 feb  18:00-20:00       87.30
-  1234590  SUBMITTED  vrijdag 28 feb  08:00-10:00       42.15
+  Order      Status     Delivery                                    Total
+  1234567  SUBMITTED  dinsdag 15 april 2025  18:00-20:00            87.30
+  1234590  SUBMITTED  vrijdag 18 april 2025  08:00-10:00            42.15
+```
+
+#### `order list [--open] [--closed] [--all] [-n NUM]`
+
+List orders. Defaults to open orders.
+
+```
+  --open      Show open orders (default)
+  --closed    Show closed/delivered orders
+  --all       Show both open and closed
+  -n NUM      Number of orders to show (default: 25)
+```
+
+```
+$ appie order list --closed -n 5
+  Order      Status     Delivery                              Total
+  1234500  DELIVERED  dinsdag 1 april 2025  18:00-20:00      63.40
+  1234520  DELIVERED  dinsdag 8 april 2025  08:00-10:00      91.10
+  ...
 ```
 
 #### `order show <order-id>`
 
-Show contents of a specific order.
+Show the full contents of an order. For closed orders, includes delivery address and invoice ID. For open orders, falls back to the live order view with current prices. Cancelled orders show the status header without delivery info.
 
 ```
-$ appie order show 1234567
-Order 1234567  SUBMITTED
-Delivery: dinsdag 25 feb  18:00-20:00
+$ appie order show 1234500
+Order 1234500  (closed 2025-03-31T22:59:00Z)
+Delivery: HOME_DELIVERY  dinsdag 1 april 2025  18:00 - 20:00
+Address:  Keizersgracht 42B, 1234AB Amsterdam
+Invoice:  1234500-00456
 
- 1  AH Verse halfvolle melk 2L       1    1.89
- 2  AH Pindakaas naturel             2    3.58
- 3  Brinta Origineel                  1    2.49
-                                    ──────
-                            3 items   7.96
+  164358  AH Oranje zoete aardappel  1 kg  2   7.58
+  ...
 ```
+```
+$ appie order show 1234510
+Order 1234510  CANCELLED
 
+  164358  AH Oranje zoete aardappel  1 kg  2   7.58
+  ...
+```
 #### `order add <order-id> <product> [-n quantity]`
 
 Add a product to an order. `<product>` can be a numeric product ID or a search term. Reopens the order if submitted.

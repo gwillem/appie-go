@@ -38,7 +38,14 @@ func (c *Client) exchangeCode(ctx context.Context, code string) error {
 }
 
 // refreshAccessToken refreshes the access token using the refresh token.
+// Concurrent callers are serialized to avoid burning a rotated refresh token.
 func (c *Client) refreshAccessToken(ctx context.Context) error {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	return c.doRefreshAccessToken(ctx)
+}
+
+func (c *Client) doRefreshAccessToken(ctx context.Context) error {
 	c.mu.RLock()
 	rt := c.refreshToken
 	c.mu.RUnlock()

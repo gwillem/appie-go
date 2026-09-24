@@ -97,7 +97,7 @@ func TestLoginRewritesBody(t *testing.T) {
 	}
 }
 
-func TestLoginRewritesLocationHeader(t *testing.T) {
+func TestLoginInterceptsAppieRedirect(t *testing.T) {
 	resp := &http.Response{
 		StatusCode: 302,
 		Header: http.Header{
@@ -107,20 +107,42 @@ func TestLoginRewritesLocationHeader(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader("")),
 	}
 
-	err := rewriteLoginResponse(resp, "http://127.0.0.1:9999", "login.ah.nl")
-	if err != nil {
-		t.Fatal(err)
+	code, ok := appieRedirectCode(resp)
+	if !ok {
+		t.Fatal("expected appie redirect to be detected")
+	}
+	if code != "xyz789" {
+		t.Errorf("expected code xyz789, got %q", code)
 	}
 
-	loc := resp.Header.Get("Location")
-	if strings.Contains(loc, "appie://") {
-		t.Errorf("Location still contains appie:// : %s", loc)
+	replaceWithLoginPage(resp, loginSuccessPage)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
-	if !strings.Contains(loc, "http://127.0.0.1:9999/callback") {
-		t.Errorf("Location doesn't contain callback URL: %s", loc)
+	if resp.Header.Get("Location") != "" {
+		t.Errorf("Location should be cleared, got %q", resp.Header.Get("Location"))
 	}
-	if !strings.Contains(loc, "code=xyz789") {
-		t.Errorf("Location lost the code param: %s", loc)
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Login successful") {
+		t.Errorf("expected success page body, got %q", string(body))
+	}
+}
+
+func TestInjectAkamaiReload(t *testing.T) {
+	body := []byte("<html><head><title>Login</title></head><body>form</body></html>")
+	got := injectAkamaiReload(body)
+	gotStr := string(got)
+	if !strings.Contains(gotStr, "ah_akamai_reload") {
+		t.Errorf("expected akamai reload script, got %q", gotStr)
+	}
+	if !strings.Contains(gotStr, "</head>") {
+		t.Errorf("expected </head> to remain, got %q", gotStr)
+	}
+
+	again := injectAkamaiReload(got)
+	if string(again) != gotStr {
+		t.Error("reload script should not be injected twice")
 	}
 }
 

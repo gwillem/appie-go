@@ -46,6 +46,7 @@ type Client struct {
 	clientVersion string
 
 	mu           sync.RWMutex
+	refreshMu    sync.Mutex
 	accessToken  string
 	refreshToken string
 	memberID     string
@@ -256,12 +257,24 @@ func (c *Client) ensureFreshToken(ctx context.Context, path string) {
 	hasRefresh := c.refreshToken != ""
 	c.mu.RUnlock()
 
-	if expired && hasRefresh {
-		// Best-effort refresh; if it fails, the original request will proceed
-		// with the expired token and the API will return an appropriate error.
-		if err := c.refreshAccessToken(ctx); err == nil {
-			_ = c.saveConfig()
-		}
+	if !expired || !hasRefresh {
+		return
+	}
+
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
+	c.mu.RLock()
+	stillExpired := !c.expiresAt.IsZero() && time.Now().After(c.expiresAt)
+	c.mu.RUnlock()
+	if !stillExpired {
+		return
+	}
+
+	// Best-effort refresh; if it fails, the original request will proceed
+	// with the expired token and the API will return an appropriate error.
+	if err := c.doRefreshAccessToken(ctx); err == nil {
+		_ = c.saveConfig()
 	}
 }
 

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -191,6 +193,83 @@ func TestNoAutoRefreshForAuthEndpoints(t *testing.T) {
 	}
 	if client.accessToken != "new-access" {
 		t.Errorf("expected 'new-access', got '%s'", client.accessToken)
+	}
+}
+
+func TestConcurrentRefreshUsesRotatedTokenOnce(t *testing.T) {
+	var refreshCount int
+	var refreshMu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/mobile-auth/v1/auth/token/refresh":
+			refreshMu.Lock()
+			refreshCount++
+			n := refreshCount
+			refreshMu.Unlock()
+
+			rt := r.Header.Get("Authorization")
+			_ = rt
+
+			var body struct {
+				RefreshToken string `json:"refreshToken"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+
+			if n > 1 && body.RefreshToken != "refresh-v2" {
+				http.Error(w, "refresh token already rotated", http.StatusUnauthorized)
+				return
+			}
+
+			nextRefresh := "refresh-v2"
+			if n > 1 {
+				nextRefresh = "refresh-v3"
+			}
+			json.NewEncoder(w).Encode(token{
+				AccessToken:  fmt.Sprintf("access-v%d", n+1),
+				RefreshToken: nextRefresh,
+				ExpiresIn:    86400,
+			})
+		case "/test-endpoint":
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("expired-access", "refresh-v1"))
+	client.mu.Lock()
+	client.expiresAt = time.Now().Add(-1 * time.Hour)
+	client.mu.Unlock()
+
+	ctx := context.Background()
+	const workers = 8
+	errCh := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			var result map[string]string
+			errCh <- client.DoRequest(ctx, http.MethodGet, "/test-endpoint", nil, &result)
+		}()
+	}
+
+	for i := 0; i < workers; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	refreshMu.Lock()
+	got := refreshCount
+	refreshMu.Unlock()
+
+	if got != 1 {
+		t.Errorf("expected exactly one refresh call, got %d", got)
+	}
+	if client.refreshToken != "refresh-v2" {
+		t.Errorf("expected rotated refresh token refresh-v2, got %q", client.refreshToken)
+	}
+	if client.accessToken != "access-v2" {
+		t.Errorf("expected access token access-v2, got %q", client.accessToken)
 	}
 }
 

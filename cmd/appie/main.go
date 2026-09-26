@@ -23,6 +23,7 @@ var globalOpts struct {
 	List    shoppingListCommand `command:"list" subcommands-optional:"true" description:"Show shopping lists"`
 	Koopjes koopjesCommand      `command:"koopjes" description:"Show last-chance bargains at a store"`
 	Update  updateCommand       `command:"update" description:"Update appie to the latest version"`
+	Basket  basketCommand       `command:"basket" subcommands-optional:"true" description:"Show and manage your shopping basket"`
 }
 
 func clientOpts() []appie.Option {

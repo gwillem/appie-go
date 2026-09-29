@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -128,6 +129,335 @@ func TestGetOrderDetails(t *testing.T) {
 	}
 	if item2.Product.BonusMechanism != "25% korting" {
 		t.Errorf("expected BonusMechanism '25%% korting', got %q", item2.Product.BonusMechanism)
+	}
+}
+
+func TestGetFulfillmentsByStatus(t *testing.T) {
+	var gotStatus string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/graphql" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+
+		var req graphQLRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if !strings.Contains(req.Query, "$status: FulfillmentStatus!") {
+			t.Errorf("query does not declare status variable: %s", req.Query)
+		}
+		gotStatus, _ = req.Variables["status"].(string)
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"orderFulfillments": map[string]any{
+					"result": []map[string]any{
+						{
+							"orderId":              384664324,
+							"statusCode":           5,
+							"statusDescription":    "Delivered",
+							"shoppingType":         "DELIVERY",
+							"transactionCompleted": true,
+							"modifiable":           false,
+							"totalPrice": map[string]any{
+								"totalPrice": map[string]any{"amount": 103.72},
+							},
+							"delivery": map[string]any{
+								"status": "DELIVERED",
+								"method": "HOME",
+								"slot": map[string]any{
+									"date":        "2026-06-16",
+									"dateDisplay": "dinsdag 16 juni",
+									"timeDisplay": "19:00 - 21:00",
+									"startTime":   "19:00",
+									"endTime":     "21:00",
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	fulfillments, err := client.GetFulfillmentsByStatus(context.Background(), FulfillmentStatusClosed)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotStatus != "CLOSED" {
+		t.Fatalf("expected status CLOSED, got %q", gotStatus)
+	}
+	if len(fulfillments) != 1 {
+		t.Fatalf("expected 1 fulfillment, got %d", len(fulfillments))
+	}
+	if fulfillments[0].OrderID != 384664324 {
+		t.Errorf("expected order 384664324, got %d", fulfillments[0].OrderID)
+	}
+	if fulfillments[0].Status != "DELIVERED" {
+		t.Errorf("expected status DELIVERED, got %q", fulfillments[0].Status)
+	}
+	if fulfillments[0].TotalPrice != 103.72 {
+		t.Errorf("expected total 103.72, got %.2f", fulfillments[0].TotalPrice)
+	}
+}
+
+func TestGetFulfillmentsByStatusRejectsInvalidStatus(t *testing.T) {
+	client := New(WithTokens("test", "test"))
+	_, err := client.GetFulfillmentsByStatus(context.Background(), FulfillmentStatus("INVALID"))
+	if err == nil {
+		t.Fatal("expected invalid status error")
+	}
+}
+
+func TestGetOrderSubmissionInfo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/graphql" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("appie-current-order-id"); got != "716976811" {
+			t.Fatalf("current order header = %q, want 716976811", got)
+		}
+		req, _ := readGraphQLRequest(t, r)
+		if !strings.Contains(req.Query, "orderValueLimits") || !strings.Contains(req.Query, "checkoutValidateOrder") {
+			t.Fatalf("query does not include checkout readiness fields: %s", req.Query)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"order": map[string]any{
+					"id":                 716976811,
+					"state":              "REOPENED",
+					"submitted":          false,
+					"lastUserChangeTime": "2026-06-29T05:49:57Z",
+					"price": map[string]any{
+						"priceTotalPayable": map[string]any{"amount": 6.57},
+					},
+				},
+				"orderValueLimits": map[string]any{
+					"minimumOrderValue": map[string]any{"amount": 50.0, "deadline": "2026-06-29T16:00:00Z"},
+					"maximumOrderValue": map[string]any{"amount": 999999.0},
+					"submittable":       true,
+				},
+				"checkoutValidateOrder": map[string]any{
+					"errors": []map[string]any{
+						{
+							"__typename": "CheckoutErrorResponse",
+							"code":       "ORDER_ATP_FAILED",
+							"message":    "The order ATP check failed",
+							"data": []map[string]any{
+								{
+									"__typename": "CheckoutErrorData",
+									"errorType":  "UNKNOWN",
+									"orderLines": []map[string]any{
+										{
+											"count": 1, "available": 0, "limitType": "STOCK_LIMIT",
+											"product": map[string]any{"id": 578190, "title": "AH Borrelnoten Shanghai", "unitSize": "300 g"},
+										},
+									},
+								},
+							},
+						},
+					},
+					"atpError": map[string]any{
+						"__typename": "CheckoutATPError",
+						"stockLimits": []map[string]any{
+							{
+								"count": 1, "available": 0, "limitType": "STOCK_LIMIT",
+								"product": map[string]any{"id": 578190, "title": "AH Borrelnoten Shanghai", "unitSize": "300 g"},
+							},
+						},
+						"orderLimits": []any{},
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	info, err := client.GetOrderSubmissionInfo(context.Background(), 716976811)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if info.State != "REOPENED" {
+		t.Fatalf("state = %q, want REOPENED", info.State)
+	}
+	if info.TotalPrice != 6.57 {
+		t.Fatalf("total = %.2f, want 6.57", info.TotalPrice)
+	}
+	if !info.ValueLimits.Submittable {
+		t.Fatal("expected submittable")
+	}
+	if info.ValueLimits.MinimumOrderValue.Amount != 50 {
+		t.Fatalf("minimum = %.2f, want 50", info.ValueLimits.MinimumOrderValue.Amount)
+	}
+	if info.ValidationErrors != 1 || !info.HasATPError {
+		t.Fatalf("validation summary = %d errors, ATP %t", info.ValidationErrors, info.HasATPError)
+	}
+	if got := info.CheckoutErrors[0].Code; got != "ORDER_ATP_FAILED" {
+		t.Fatalf("checkout error code = %q", got)
+	}
+	if info.ATPError == nil || len(info.ATPError.StockLimits) != 1 {
+		t.Fatalf("ATP error = %#v", info.ATPError)
+	}
+	line := info.ATPError.StockLimits[0]
+	if line.Product == nil || line.Product.ID != 578190 || line.Available != 0 || line.Count != 1 {
+		t.Fatalf("stock-limit line = %#v", line)
+	}
+}
+
+func TestGetDefaultDCTCard(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/graphql" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		req, _ := readGraphQLRequest(t, r)
+		if !strings.Contains(req.Query, "paymentsGetDCTCards") {
+			t.Fatalf("unexpected query: %s", req.Query)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"paymentsGetDCTCards": []map[string]any{
+					{
+						"cardId":    "card-secondary",
+						"cardAlias": "secondary",
+						"default":   false,
+						"status":    "ACTIVE",
+					},
+					{
+						"cardId":    "card-default",
+						"cardAlias": "default",
+						"default":   true,
+						"status":    "ACTIVE",
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	card, err := client.GetDefaultDCTCard(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if card.CardID != "card-default" {
+		t.Fatalf("card ID = %q, want card-default", card.CardID)
+	}
+}
+
+func TestSubmitOrderUsesDCTPayloadV4(t *testing.T) {
+	var sawSubmit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/graphql" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		req, _ := readGraphQLRequest(t, r)
+		switch {
+		case strings.Contains(req.Query, "OrderSubmissionInfo"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"order": map[string]any{
+						"id":                 716976811,
+						"state":              "REOPENED",
+						"submitted":          false,
+						"lastUserChangeTime": "2026-06-29T05:49:57Z",
+						"price": map[string]any{
+							"priceTotalPayable": map[string]any{"amount": 6.57},
+						},
+					},
+					"orderValueLimits": map[string]any{
+						"minimumOrderValue": map[string]any{"amount": 50.0},
+						"maximumOrderValue": map[string]any{"amount": 999999.0},
+						"submittable":       true,
+					},
+					"checkoutValidateOrder": map[string]any{"errors": []any{}, "atpError": nil},
+				},
+			})
+		case strings.Contains(req.Query, "DCTCards"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"paymentsGetDCTCards": []map[string]any{
+						{
+							"cardId":    "card-default",
+							"cardAlias": "0 30",
+							"default":   true,
+							"status":    "ACTIVE",
+						},
+					},
+				},
+			})
+		case strings.Contains(req.Query, "CheckoutConfirmOrder"):
+			sawSubmit = true
+			if !strings.Contains(req.Query, "CheckoutConfirmOrderPayloadV4") {
+				t.Fatalf("submit query does not use V4 payload: %s", req.Query)
+			}
+			orderInfo, ok := req.Variables["orderInfo"].(map[string]any)
+			if !ok {
+				t.Fatalf("orderInfo variable missing or wrong type: %#v", req.Variables["orderInfo"])
+			}
+			if got := orderInfo["channel"]; got != "IOS" {
+				t.Fatalf("channel = %v, want IOS", got)
+			}
+			if got := orderInfo["orderLastModified"]; got != "2026-06-29T05:49:57Z" {
+				t.Fatalf("orderLastModified = %v", got)
+			}
+			if got := orderInfo["paymentMethod"]; got != "DCT" {
+				t.Fatalf("paymentMethod = %v, want DCT", got)
+			}
+			dct, ok := orderInfo["dct"].(map[string]any)
+			if !ok {
+				t.Fatalf("dct variable missing or wrong type: %#v", orderInfo["dct"])
+			}
+			if got := dct["cardId"]; got != "card-default" {
+				t.Fatalf("cardId = %v, want card-default", got)
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"checkoutConfirmOrderV4": map[string]any{
+						"status":       "SUCCESS",
+						"errorMessage": "",
+						"errors":       []any{},
+						"atpError":     nil,
+						"data": map[string]any{
+							"order": map[string]any{
+								"id":        716976811,
+								"state":     "SUBMITTED",
+								"submitted": true,
+							},
+							"payments": []map[string]any{
+								{"mutation": map[string]any{"status": "SUCCESS"}},
+							},
+						},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected query: %s", req.Query)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(WithBaseURL(srv.URL), WithTokens("test", "test"))
+	result, err := client.SubmitOrder(context.Background(), 716976811, OrderSubmitOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sawSubmit {
+		t.Fatal("submit mutation was not called")
+	}
+	if result.OrderState != "SUBMITTED" {
+		t.Fatalf("state = %q, want SUBMITTED", result.OrderState)
+	}
+	if len(result.PaymentStatuses) != 1 || result.PaymentStatuses[0] != "SUCCESS" {
+		t.Fatalf("payment statuses = %#v", result.PaymentStatuses)
 	}
 }
 

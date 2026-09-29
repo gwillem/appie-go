@@ -104,13 +104,22 @@ Date:  2025-02-21T14:30:00
 
 ### `order`
 
-List all open/scheduled orders (fulfillments).
+List open/scheduled orders (fulfillments). Use `--closed` for past delivered or cancelled orders, and `--all` to include both open and closed orders.
 
 ```
 $ appie order
   Order      Status     Delivery                         Total
   1234567  SUBMITTED  dinsdag 25 feb  18:00-20:00       87.30
   1234590  SUBMITTED  vrijdag 28 feb  08:00-10:00       42.15
+
+$ appie order --closed
+  Order      Status     Delivery                         Total
+  9876543  DELIVERED  dinsdag 18 feb  18:00-20:00       64.20
+
+$ appie order --all
+  Order      Status     Delivery                         Total
+  1234567  SUBMITTED  dinsdag 25 feb  18:00-20:00       87.30
+  9876543  DELIVERED  dinsdag 18 feb  18:00-20:00       64.20
 ```
 
 #### `order show <order-id>`
@@ -164,6 +173,36 @@ Remove a product from an order. Reopens the order if submitted.
 ```
 $ appie order rm 1234567 371880
 Removed Optimel Drinkyoghurt aardbei from order 1234567
+```
+
+#### `order submit <order-id> [--yes] [--payment METHOD]`
+
+Validate checkout readiness for a reopened order. Without `--yes`, this command
+only prints the current order state, value-limit status, validation status, and
+selected payment method.
+
+```
+  --payment METHOD    auto, dct, or pay-at-delivery (default: auto)
+  --yes               actually submit the order
+```
+
+`auto` uses the active default DCT bank card. Use `--payment pay-at-delivery`
+only when you explicitly want to submit with pay-at-delivery.
+
+```
+$ appie order submit 1234567
+Order 1234567  REOPENED
+Delivery: dinsdag 25 feb  18:00-20:00
+Total: 42.15
+Minimum: 50.00 by 2026-02-24T16:00:00Z (submittable: true)
+Validation: ok
+Payment: DCT 0 30 (ING_BANK)
+
+Dry run only; rerun with --yes to submit.
+
+$ appie order submit 1234567 --yes
+Submitted order 1234567: SUBMITTED
+Payment: AUTHORIZED
 ```
 
 ### `koopjes <postcode>`

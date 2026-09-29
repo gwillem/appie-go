@@ -6,15 +6,20 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	appie "github.com/gwillem/appie-go"
 )
 
 type orderCommand struct {
-	Show orderShowCommand `command:"show" description:"Show contents of an order"`
-	Add  orderAddCommand  `command:"add" description:"Add a product to an order"`
-	Rm   orderRmCommand   `command:"rm" description:"Remove a product from an order"`
+	Closed bool `long:"closed" description:"List closed/delivered orders instead of open orders"`
+	All    bool `long:"all" description:"List all orders, including open and closed"`
+
+	Show   orderShowCommand   `command:"show" description:"Show contents of an order"`
+	Add    orderAddCommand    `command:"add" description:"Add a product to an order"`
+	Rm     orderRmCommand     `command:"rm" description:"Remove a product from an order"`
+	Submit orderSubmitCommand `command:"submit" description:"Finalize reopened order changes"`
 }
 
 func (cmd *orderCommand) Execute(args []string) error {
@@ -26,13 +31,18 @@ func (cmd *orderCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	status, emptyLabel, err := cmd.listStatus()
+	if err != nil {
+		return err
+	}
+
+	fulfillments, err := client.GetFulfillmentsByStatus(ctx, status)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
 
 	if len(fulfillments) == 0 {
-		fmt.Println("No open orders")
+		fmt.Printf("No %s orders\n", emptyLabel)
 		return nil
 	}
 
@@ -46,6 +56,19 @@ func (cmd *orderCommand) Execute(args []string) error {
 		fmt.Fprintf(w, "\t%d\t%s\t%s\t%.2f\t\n", f.OrderID, f.Status, delivery, f.TotalPrice)
 	}
 	return w.Flush()
+}
+
+func (cmd *orderCommand) listStatus() (appie.FulfillmentStatus, string, error) {
+	if cmd.Closed && cmd.All {
+		return "", "", fmt.Errorf("--closed and --all cannot be used together")
+	}
+	if cmd.Closed {
+		return appie.FulfillmentStatusClosed, "closed", nil
+	}
+	if cmd.All {
+		return appie.FulfillmentStatusAll, "all", nil
+	}
+	return appie.FulfillmentStatusOpen, "open", nil
 }
 
 func findFulfillment(fulfillments []appie.Fulfillment, orderID string) *appie.Fulfillment {
@@ -149,7 +172,7 @@ func (cmd *orderShowCommand) Execute(args []string) error {
 		return err
 	}
 
-	fulfillments, err := client.GetFulfillments(ctx)
+	fulfillments, err := client.GetFulfillmentsByStatus(ctx, appie.FulfillmentStatusAll)
 	if err != nil {
 		return fmt.Errorf("failed to get orders: %w", err)
 	}
@@ -161,14 +184,27 @@ func (cmd *orderShowCommand) Execute(args []string) error {
 		return fmt.Errorf("failed to get order details: %w", err)
 	}
 
-	// Try to get summary for totals
-	client.SetOrderID(orderID)
-	if summary, err := client.GetOrder(ctx); err == nil {
-		order.TotalPrice = summary.TotalPrice
-		order.TotalDiscount = summary.TotalDiscount
+	f := findFulfillment(fulfillments, order.ID)
+	if f == nil {
+		closed, err := client.GetFulfillmentsByStatus(ctx, appie.FulfillmentStatusClosed)
+		if err == nil {
+			f = findFulfillment(closed, order.ID)
+		}
 	}
 
-	f := findFulfillment(fulfillments, order.ID)
+	// Try to get summary for totals on open orders. Delivered orders should use
+	// their fulfillment total; the active summary can point at a different order.
+	if f != nil && (f.Status == "DELIVERED" || f.Status == "CANCELLED") {
+		order.TotalPrice = f.TotalPrice
+		order.TotalDiscount = 0
+	} else {
+		client.SetOrderID(orderID)
+		if summary, err := client.GetOrder(ctx); err == nil {
+			order.TotalPrice = summary.TotalPrice
+			order.TotalDiscount = summary.TotalDiscount
+		}
+	}
+
 	return printOrder(order, f)
 }
 
@@ -260,6 +296,154 @@ func (cmd *orderRmCommand) Execute(args []string) error {
 
 	fmt.Printf("Removed %d from order %d\n", productID, orderID)
 	return nil
+}
+
+// submit subcommand
+
+type orderSubmitCommand struct {
+	Args struct {
+		OrderID int `positional-arg-name:"order-id" required:"true"`
+	} `positional-args:"yes"`
+	Payment string `long:"payment" default:"auto" description:"Payment method: auto, dct, or pay-at-delivery"`
+	Yes     bool   `long:"yes" description:"Actually submit the order; without this flag only validates readiness"`
+}
+
+func (cmd *orderSubmitCommand) Execute(args []string) error {
+	ctx, client, err := orderSetup()
+	if err != nil {
+		return err
+	}
+
+	orderID := cmd.Args.OrderID
+	info, err := client.GetOrderSubmissionInfo(ctx, orderID)
+	if err != nil {
+		return err
+	}
+
+	fulfillments, err := client.GetFulfillments(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get orders: %w", err)
+	}
+	fulfillment := findFulfillment(fulfillments, strconv.Itoa(orderID))
+
+	paymentMethod, card, err := resolveSubmitPayment(ctx, client, cmd.Payment)
+	if err != nil {
+		return err
+	}
+
+	printSubmitReadiness(info, fulfillment, paymentMethod, card)
+
+	if info.ValidationErrors > 0 || info.HasATPError {
+		return fmt.Errorf("order %d has checkout validation errors", orderID)
+	}
+	if !info.ValueLimits.Submittable {
+		return fmt.Errorf("order %d is not submittable", orderID)
+	}
+	if !cmd.Yes {
+		fmt.Println()
+		fmt.Println("Dry run only; rerun with --yes to submit.")
+		return nil
+	}
+
+	opts := appie.OrderSubmitOptions{PaymentMethod: paymentMethod}
+	if card != nil {
+		opts.DCTCardID = card.CardID
+	}
+	result, err := client.SubmitOrder(ctx, orderID, opts)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Printf("Submitted order %d: %s\n", result.OrderID, result.OrderState)
+	if len(result.PaymentStatuses) > 0 {
+		fmt.Printf("Payment: %s\n", strings.Join(result.PaymentStatuses, ", "))
+	}
+	return nil
+}
+
+func resolveSubmitPayment(ctx context.Context, client *appie.Client, value string) (appie.PaymentMethod, *appie.DCTCard, error) {
+	switch strings.ToLower(value) {
+	case "", "auto", "dct":
+		card, err := client.GetDefaultDCTCard(ctx)
+		if err != nil {
+			return "", nil, err
+		}
+		return appie.PaymentMethodDCT, card, nil
+	case "pay-at-delivery":
+		return appie.PaymentMethodPayAtDelivery, nil, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported payment method %q", value)
+	}
+}
+
+func printSubmitReadiness(info *appie.OrderSubmissionInfo, fulfillment *appie.Fulfillment, paymentMethod appie.PaymentMethod, card *appie.DCTCard) {
+	fmt.Printf("Order %d  %s\n", info.OrderID, info.State)
+	if fulfillment != nil {
+		delivery := fulfillment.Delivery.Slot.DateDisplay
+		if fulfillment.Delivery.Slot.TimeDisplay != "" {
+			delivery += "  " + fulfillment.Delivery.Slot.TimeDisplay
+		}
+		fmt.Printf("Delivery: %s\n", delivery)
+	}
+	fmt.Printf("Total: %.2f\n", info.TotalPrice)
+	fmt.Printf("Minimum: %.2f", info.ValueLimits.MinimumOrderValue.Amount)
+	if info.ValueLimits.MinimumOrderValue.Deadline != "" {
+		fmt.Printf(" by %s", info.ValueLimits.MinimumOrderValue.Deadline)
+	}
+	fmt.Printf(" (submittable: %t)\n", info.ValueLimits.Submittable)
+
+	if info.ValidationErrors == 0 && !info.HasATPError {
+		fmt.Println("Validation: ok")
+	} else {
+		fmt.Printf("Validation: %d errors, ATP error: %t\n", info.ValidationErrors, info.HasATPError)
+		for _, validationError := range info.CheckoutErrors {
+			label := validationError.Code
+			if label == "" {
+				label = validationError.TypeName
+			}
+			if validationError.Message != "" {
+				fmt.Printf("  %s: %s\n", label, validationError.Message)
+			} else if label != "" {
+				fmt.Printf("  %s\n", label)
+			}
+		}
+		if info.ATPError != nil {
+			printCheckoutLimits("Stock limit", info.ATPError.StockLimits)
+			printCheckoutLimits("Order limit", info.ATPError.OrderLimits)
+		}
+	}
+
+	if paymentMethod == appie.PaymentMethodDCT && card != nil {
+		label := card.CardAlias
+		if label == "" {
+			label = "default card"
+		}
+		if card.CardArtID != "" {
+			label += " (" + card.CardArtID + ")"
+		}
+		fmt.Printf("Payment: DCT %s\n", label)
+		return
+	}
+	fmt.Printf("Payment: %s\n", paymentMethod)
+}
+
+func printCheckoutLimits(label string, lines []appie.CheckoutOrderLine) {
+	for _, line := range lines {
+		productID := 0
+		productTitle := "unknown product"
+		productSize := ""
+		if line.Product != nil {
+			productID = line.Product.ID
+			productTitle = line.Product.Title
+			productSize = line.Product.UnitSize
+		}
+		if productSize != "" {
+			productTitle += " " + productSize
+		}
+		fmt.Printf("  %s: %d %s (requested %d, available %d, type %s)\n",
+			label, productID, productTitle, line.Count, line.Available, line.LimitType)
+	}
 }
 
 // orderSetup creates an authenticated client and context.

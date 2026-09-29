@@ -149,6 +149,118 @@ type OrderSummary struct {
 	DeliveryCost  float64 `json:"deliveryCost,omitempty"`
 }
 
+// OrderSubmissionInfo contains the current checkout readiness state for an
+// order. It is read before submitting reopened order changes.
+type OrderSubmissionInfo struct {
+	OrderID            int                       `json:"orderId"`
+	State              string                    `json:"state"`
+	Submitted          bool                      `json:"submitted"`
+	LastUserChangeTime string                    `json:"lastUserChangeTime"`
+	TotalPrice         float64                   `json:"totalPrice"`
+	ValueLimits        OrderValueLimits          `json:"valueLimits"`
+	ValidationErrors   int                       `json:"validationErrors"`
+	HasATPError        bool                      `json:"hasAtpError"`
+	CheckoutErrors     []CheckoutValidationError `json:"checkoutErrors,omitempty"`
+	ATPError           *CheckoutATPError         `json:"atpError,omitempty"`
+}
+
+// CheckoutValidationError describes a validation error returned before order
+// submission. Data can contain the exact affected order lines.
+type CheckoutValidationError struct {
+	TypeName string              `json:"__typename,omitempty"`
+	Code     string              `json:"code,omitempty"`
+	Message  string              `json:"message,omitempty"`
+	Data     []CheckoutErrorData `json:"data,omitempty"`
+}
+
+// CheckoutErrorData groups order lines associated with one checkout error.
+type CheckoutErrorData struct {
+	TypeName     string              `json:"__typename,omitempty"`
+	ErrorType    string              `json:"errorType,omitempty"`
+	CategoryName string              `json:"categoryName,omitempty"`
+	OrderLines   []CheckoutOrderLine `json:"orderLines,omitempty"`
+}
+
+// CheckoutATPError contains stock and order-limit failures.
+type CheckoutATPError struct {
+	TypeName    string              `json:"__typename,omitempty"`
+	StockLimits []CheckoutOrderLine `json:"stockLimits,omitempty"`
+	OrderLimits []CheckoutOrderLine `json:"orderLimits,omitempty"`
+}
+
+// CheckoutOrderLine identifies an unavailable or limited basket line.
+type CheckoutOrderLine struct {
+	Product   *Product `json:"product,omitempty"`
+	Count     int      `json:"count"`
+	Available int      `json:"available"`
+	LimitType string   `json:"limitType,omitempty"`
+}
+
+// OrderValueLimits describes AH's minimum/maximum order value checks.
+type OrderValueLimits struct {
+	MinimumOrderValue MinimumOrderValue `json:"minimumOrderValue"`
+	MaximumOrderValue MaximumOrderValue `json:"maximumOrderValue"`
+	Submittable       bool              `json:"submittable"`
+}
+
+type MinimumOrderValue struct {
+	Amount   float64 `json:"amount"`
+	Deadline string  `json:"deadline,omitempty"`
+}
+
+type MaximumOrderValue struct {
+	Amount float64 `json:"amount"`
+}
+
+// PaymentMethod is an AH checkout payment method.
+type PaymentMethod string
+
+const (
+	PaymentMethodAuto          PaymentMethod = ""
+	PaymentMethodDCT           PaymentMethod = "DCT"
+	PaymentMethodPayAtDelivery PaymentMethod = "PAY_AT_DELIVERY"
+)
+
+// DCTCard is a stored debit-card-token payment card.
+type DCTCard struct {
+	CardID      string `json:"cardId"`
+	CardAlias   string `json:"cardAlias"`
+	Default     bool   `json:"default"`
+	IssuerID    string `json:"issuerId"`
+	CardArtID   string `json:"cardArtId"`
+	Status      string `json:"status"`
+	CreatedDate string `json:"createdDate,omitempty"`
+}
+
+// OrderSubmitOptions controls how a reopened order is finalized.
+type OrderSubmitOptions struct {
+	PaymentMethod PaymentMethod
+	DCTCardID     string
+	Channel       string
+}
+
+// OrderSubmitResult is returned by AH after a checkout confirm mutation.
+type OrderSubmitResult struct {
+	Status           string `json:"status"`
+	ErrorMessage     string `json:"errorMessage,omitempty"`
+	OrderID          int    `json:"orderId,omitempty"`
+	OrderState       string `json:"orderState,omitempty"`
+	Submitted        bool   `json:"submitted,omitempty"`
+	PaymentStatuses  []string
+	ValidationErrors int  `json:"validationErrors,omitempty"`
+	HasATPError      bool `json:"hasAtpError,omitempty"`
+}
+
+// FulfillmentStatus selects whether order fulfillment queries return upcoming,
+// past, or all orders.
+type FulfillmentStatus string
+
+const (
+	FulfillmentStatusOpen   FulfillmentStatus = "OPEN"
+	FulfillmentStatusClosed FulfillmentStatus = "CLOSED"
+	FulfillmentStatusAll    FulfillmentStatus = "ALL"
+)
+
 // ShoppingList represents a user's shopping list. Users can have multiple lists.
 type ShoppingList struct {
 	// ID is a UUID identifying the list.

@@ -141,3 +141,64 @@ func TestSearchProductsBonusPagination(t *testing.T) {
 		t.Errorf("unexpected mechanisms: %q, %q, %q", products[0].BonusMechanism, products[1].BonusMechanism, products[2].BonusMechanism)
 	}
 }
+
+func TestGetProductUsesFetchProductDetails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/graphql" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		var body struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		if body.Variables["productId"] != float64(51768) {
+			t.Errorf("expected productId 51768, got %v", body.Variables["productId"])
+		}
+		fmt.Fprint(w, `{"data":{"product":{
+			"id":51768,"title":"AH Boerenkool","brand":"AH","category":"Groente, aardappelen/Boerenkool",
+			"summary":"Boerenkool voor stamppot.","icons":["NUTRISCORE_A","LOCALLY_PRODUCED"],"salesUnitSize":"300 g",
+			"priceV2":{"now":{"amount":1.99},"was":{"amount":1.99},
+				"unitInfo":{"description":"KG","price":{"formattedV2":"€6.63"}},
+				"discount":{"description":"1 + 1 gratis"}},
+			"availability":{"online":{"status":"AVAILABLE"},"isOrderable":true},
+			"imagePack":[{"small":{"url":"s.webp","width":200,"height":200},"large":{"url":"l.webp","width":800,"height":800}}]}}}`)
+	}))
+	defer server.Close()
+
+	product, err := New(WithBaseURL(server.URL)).GetProduct(context.Background(), 51768)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	checks := map[string][2]any{
+		"ID":                   {product.ID, 51768},
+		"Title":                {product.Title, "AH Boerenkool"},
+		"Category":             {product.Category, "Groente, aardappelen"},
+		"SubCategory":          {product.SubCategory, "Boerenkool"},
+		"Price.Now":            {product.Price.Now, 1.99},
+		"IsBonus":              {product.IsBonus, true},
+		"BonusMechanism":       {product.BonusMechanism, "1 + 1 gratis"},
+		"IsAvailable":          {product.IsAvailable, true},
+		"IsOrderable":          {product.IsOrderable, true},
+		"UnitSize":             {product.UnitSize, "300 g"},
+		"UnitPriceDescription": {product.UnitPriceDescription, "per kg €6.63"},
+		"NutriScore":           {product.NutriScore, "A"},
+		"Images":               {len(product.Images), 2},
+	}
+	for name, c := range checks {
+		if c[0] != c[1] {
+			t.Errorf("%s: expected %v, got %v", name, c[1], c[0])
+		}
+	}
+}
+
+func TestGetProductNotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data":{"product":null}}`)
+	}))
+	defer server.Close()
+
+	if _, err := New(WithBaseURL(server.URL)).GetProduct(context.Background(), 1); err == nil {
+		t.Error("expected an error for a missing product")
+	}
+}

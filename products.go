@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // searchResponse matches the API response for product search
@@ -71,6 +72,121 @@ type productNutritionResponse struct {
 	} `json:"product"`
 }
 
+// fetchProductDetailsQuery is a subset of the Appie app's FetchProductDetails
+// query, which replaced /mobile-services/product/detail/v4/fir/{id} (404 since
+// 2026-11).
+const fetchProductDetailsQuery = `query FetchProductDetails($productId: Int!) {
+  product(id: $productId) {
+    id
+    title
+    brand
+    category
+    summary
+    icons
+    salesUnitSize
+    priceV2 {
+      now { amount }
+      was { amount }
+      unitInfo { description price { formattedV2 } }
+      discount { description }
+    }
+    availability {
+      online { status }
+      isOrderable
+    }
+    imagePack {
+      large { url width height }
+      medium { url width height }
+      small { url width height }
+    }
+  }
+}`
+
+type productImageRendition struct {
+	URL    string `json:"url"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+type productDetailsResponse struct {
+	Product *struct {
+		ID            int      `json:"id"`
+		Title         string   `json:"title"`
+		Brand         string   `json:"brand"`
+		Category      string   `json:"category"`
+		Summary       string   `json:"summary"`
+		Icons         []string `json:"icons"`
+		SalesUnitSize string   `json:"salesUnitSize"`
+		PriceV2       struct {
+			Now struct {
+				Amount float64 `json:"amount"`
+			} `json:"now"`
+			Was struct {
+				Amount float64 `json:"amount"`
+			} `json:"was"`
+			UnitInfo *struct {
+				Description string `json:"description"`
+				Price       struct {
+					FormattedV2 string `json:"formattedV2"`
+				} `json:"price"`
+			} `json:"unitInfo"`
+			Discount *struct {
+				Description string `json:"description"`
+			} `json:"discount"`
+		} `json:"priceV2"`
+		Availability struct {
+			Online struct {
+				Status string `json:"status"`
+			} `json:"online"`
+			IsOrderable bool `json:"isOrderable"`
+		} `json:"availability"`
+		ImagePack []struct {
+			Large  *productImageRendition `json:"large"`
+			Medium *productImageRendition `json:"medium"`
+			Small  *productImageRendition `json:"small"`
+		} `json:"imagePack"`
+	} `json:"product"`
+}
+
+func (r *productDetailsResponse) toProduct() Product {
+	p := r.Product
+	category, subCategory, _ := strings.Cut(p.Category, "/")
+	product := Product{
+		ID:               p.ID,
+		WebshopID:        strconv.Itoa(p.ID),
+		Title:            p.Title,
+		Brand:            p.Brand,
+		ShortDescription: p.Summary,
+		Category:         category,
+		SubCategory:      subCategory,
+		Price:            Price{Now: p.PriceV2.Now.Amount, Was: p.PriceV2.Was.Amount},
+		IsAvailable:      p.Availability.Online.Status == "AVAILABLE",
+		IsOrderable:      p.Availability.IsOrderable,
+		UnitSize:         p.SalesUnitSize,
+		PropertyIcons:    p.Icons,
+	}
+	if p.PriceV2.Discount != nil {
+		product.IsBonus = true
+		product.BonusMechanism = p.PriceV2.Discount.Description
+	}
+	if info := p.PriceV2.UnitInfo; info != nil {
+		product.UnitPriceDescription = fmt.Sprintf("per %s %s", strings.ToLower(info.Description), info.Price.FormattedV2)
+	}
+	for _, icon := range p.Icons {
+		if grade, ok := strings.CutPrefix(icon, "NUTRISCORE_"); ok {
+			product.NutriScore = grade
+		}
+	}
+	if len(p.ImagePack) > 0 {
+		for _, rendition := range []*productImageRendition{p.ImagePack[0].Small, p.ImagePack[0].Medium, p.ImagePack[0].Large} {
+			if rendition != nil {
+				product.Images = append(product.Images, Image{URL: rendition.URL, Width: rendition.Width, Height: rendition.Height})
+			}
+		}
+	}
+	return product
+}
+
 func (p *productResponse) toProduct() Product {
 	price := p.CurrentPrice
 	if price == 0 {
@@ -111,18 +227,15 @@ func (c *Client) SearchProducts(ctx context.Context, query string, limit int) ([
 // GetProduct retrieves a single product by its webshopId.
 // For nutritional information, use GetProductFull instead.
 func (c *Client) GetProduct(ctx context.Context, productID int) (*Product, error) {
-	path := fmt.Sprintf("/mobile-services/product/detail/v4/fir/%d", productID)
-
-	var result struct {
-		ProductID   int             `json:"productId"`
-		ProductCard productResponse `json:"productCard"`
-	}
-
-	if err := c.DoRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
+	var result productDetailsResponse
+	if err := c.DoGraphQL(ctx, fetchProductDetailsQuery, map[string]any{"productId": productID}, &result); err != nil {
 		return nil, fmt.Errorf("get product failed: %w", err)
 	}
+	if result.Product == nil {
+		return nil, fmt.Errorf("get product failed: product %d not found", productID)
+	}
 
-	product := result.ProductCard.toProduct()
+	product := result.toProduct()
 	return &product, nil
 }
 

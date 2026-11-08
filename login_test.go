@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -208,5 +209,90 @@ func TestLoginContextCancel(t *testing.T) {
 	err := <-errCh
 	if err != context.Canceled {
 		t.Errorf("expected context.Canceled, got %v", err)
+	}
+}
+
+func TestTakeNextRedirectCode(t *testing.T) {
+	codeCh := make(chan string, 1)
+	var taken atomic.Bool
+	doneURL := "http://127.0.0.1:9999/login-done"
+	newResp := func(body string) *http.Response {
+		return &http.Response{
+			StatusCode: 200,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+	}
+
+	first := newResp(`{"pageProps":{"__N_REDIRECT":"appie://login-exit?code=abc123","__N_REDIRECT_STATUS":302},"__N_SSP":true}`)
+	if err := takeNextRedirectCode(first, codeCh, &taken, doneURL); err != nil {
+		t.Fatal(err)
+	}
+	if code := <-codeCh; code != "abc123" {
+		t.Errorf("expected code 'abc123', got '%s'", code)
+	}
+	body, _ := io.ReadAll(first.Body)
+	if strings.Contains(string(body), "appie://") || !strings.Contains(string(body), doneURL) {
+		t.Errorf("first response not redirected to the success page: %s", body)
+	}
+
+	second := newResp(`{"pageProps":{},"__N_SSP":true}`)
+	if err := takeNextRedirectCode(second, codeCh, &taken, doneURL); err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(second.Body)
+	if !strings.Contains(string(body), doneURL) {
+		t.Errorf("second response not redirected to the success page: %s", body)
+	}
+}
+
+func TestLoginReadsCodeFromNextRedirect(t *testing.T) {
+	installationIDCh := make(chan string, 1)
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/secure/oauth/authorize":
+			installationIDCh <- r.Header.Get("x-fraud-detection-installation-id")
+			w.Write([]byte("ok"))
+		case strings.HasSuffix(r.URL.Path, "/ingelogd.json"):
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"pageProps":{"__N_REDIRECT":"appie://login-exit?code=next-code","__N_REDIRECT_STATUS":302},"__N_SSP":true}`))
+		case r.URL.Path == "/mobile-auth/v1/auth/token":
+			json.NewEncoder(w).Encode(token{AccessToken: "next-access", RefreshToken: "next-refresh", ExpiresIn: 86400})
+		}
+	}))
+	defer mock.Close()
+
+	client := New(WithBaseURL(mock.URL))
+	client.loginBaseURL = mock.URL
+	proxyURLCh := make(chan string, 1)
+	client.openBrowser = func(u string) { proxyURLCh <- u }
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- client.Login(context.Background()) }()
+
+	loginURL := <-proxyURLCh
+	u, err := url.Parse(loginURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Path != "/secure/oauth/authorize" {
+		t.Errorf("expected login to start at /secure/oauth/authorize, got %s", u.Path)
+	}
+	for _, path := range []string{u.RequestURI(), "/login/_next/data/build/nl/ingelogd.json", loginDonePath} {
+		resp, err := http.Get(fmt.Sprintf("http://%s%s", u.Host, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+	if id := <-installationIDCh; id == "" {
+		t.Error("authorize request did not carry x-fraud-detection-installation-id")
+	}
+	if client.accessToken != "next-access" {
+		t.Errorf("expected 'next-access', got '%s'", client.accessToken)
 	}
 }

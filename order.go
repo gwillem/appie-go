@@ -261,6 +261,298 @@ func (c *Client) GetOrderSummary(ctx context.Context) (*OrderSummary, error) {
 	}, nil
 }
 
+const orderSubmissionInfoQuery = `query OrderSubmissionInfo($orderId: Int!) {
+  order(id: $orderId) {
+    id
+    state
+    submitted
+    lastUserChangeTime
+    price {
+      priceTotalPayable { amount }
+    }
+  }
+  orderValueLimits(orderId: $orderId) {
+    minimumOrderValue { amount deadline }
+    maximumOrderValue { amount }
+    submittable
+  }
+  checkoutValidateOrder(orderId: $orderId) {
+    errors {
+      __typename
+      code
+      message
+      data {
+        __typename
+        errorType
+        categoryName
+        orderLines {
+          count
+          available
+          limitType
+          product { id title unitSize: salesUnitSize }
+        }
+      }
+    }
+    atpError {
+      __typename
+      stockLimits {
+        count
+        available
+        limitType
+        product { id title unitSize: salesUnitSize }
+      }
+      orderLimits {
+        count
+        available
+        limitType
+        product { id title unitSize: salesUnitSize }
+      }
+    }
+  }
+}`
+
+// GetOrderSubmissionInfo retrieves the current checkout readiness state for an order.
+func (c *Client) GetOrderSubmissionInfo(ctx context.Context, orderID int) (*OrderSubmissionInfo, error) {
+	c.SetOrderID(orderID)
+
+	type submissionInfoResponse struct {
+		Order struct {
+			ID                 int    `json:"id"`
+			State              string `json:"state"`
+			Submitted          bool   `json:"submitted"`
+			LastUserChangeTime string `json:"lastUserChangeTime"`
+			Price              struct {
+				PriceTotalPayable struct {
+					Amount float64 `json:"amount"`
+				} `json:"priceTotalPayable"`
+			} `json:"price"`
+		} `json:"order"`
+		OrderValueLimits struct {
+			MinimumOrderValue MinimumOrderValue `json:"minimumOrderValue"`
+			MaximumOrderValue MaximumOrderValue `json:"maximumOrderValue"`
+			Submittable       bool              `json:"submittable"`
+		} `json:"orderValueLimits"`
+		CheckoutValidateOrder struct {
+			Errors   []CheckoutValidationError `json:"errors"`
+			ATPError *CheckoutATPError         `json:"atpError"`
+		} `json:"checkoutValidateOrder"`
+	}
+
+	var resp submissionInfoResponse
+	vars := map[string]any{"orderId": orderID}
+	if err := c.DoGraphQL(ctx, orderSubmissionInfoQuery, vars, &resp); err != nil {
+		return nil, fmt.Errorf("get order submission info failed: %w", err)
+	}
+
+	return &OrderSubmissionInfo{
+		OrderID:            resp.Order.ID,
+		State:              resp.Order.State,
+		Submitted:          resp.Order.Submitted,
+		LastUserChangeTime: resp.Order.LastUserChangeTime,
+		TotalPrice:         resp.Order.Price.PriceTotalPayable.Amount,
+		ValueLimits: OrderValueLimits{
+			MinimumOrderValue: resp.OrderValueLimits.MinimumOrderValue,
+			MaximumOrderValue: resp.OrderValueLimits.MaximumOrderValue,
+			Submittable:       resp.OrderValueLimits.Submittable,
+		},
+		ValidationErrors: len(resp.CheckoutValidateOrder.Errors),
+		HasATPError:      resp.CheckoutValidateOrder.ATPError != nil,
+		CheckoutErrors:   resp.CheckoutValidateOrder.Errors,
+		ATPError:         resp.CheckoutValidateOrder.ATPError,
+	}, nil
+}
+
+const dctCardsQuery = `query DCTCards {
+  paymentsGetDCTCards {
+    cardId
+    cardAlias
+    default
+    issuerId
+    cardArtId
+    status
+    createdDate
+  }
+}`
+
+// GetDCTCards retrieves stored debit-card-token payment cards.
+func (c *Client) GetDCTCards(ctx context.Context) ([]DCTCard, error) {
+	type dctCardsResponse struct {
+		PaymentsGetDCTCards []DCTCard `json:"paymentsGetDCTCards"`
+	}
+
+	var resp dctCardsResponse
+	if err := c.DoGraphQL(ctx, dctCardsQuery, nil, &resp); err != nil {
+		return nil, fmt.Errorf("get DCT cards failed: %w", err)
+	}
+
+	return resp.PaymentsGetDCTCards, nil
+}
+
+// GetDefaultDCTCard returns the active default stored debit card, falling back
+// to the first active DCT card if the API does not mark a default.
+func (c *Client) GetDefaultDCTCard(ctx context.Context) (*DCTCard, error) {
+	cards, err := c.GetDCTCards(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var firstActive *DCTCard
+	for i := range cards {
+		card := &cards[i]
+		if card.Status != "ACTIVE" {
+			continue
+		}
+		if firstActive == nil {
+			firstActive = card
+		}
+		if card.Default {
+			return card, nil
+		}
+	}
+	if firstActive != nil {
+		return firstActive, nil
+	}
+	return nil, fmt.Errorf("no active DCT card found")
+}
+
+const submitOrderMutation = `mutation CheckoutConfirmOrder($orderId: Int!, $orderInfo: CheckoutConfirmOrderPayloadV4!) {
+  checkoutConfirmOrderV4(orderId: $orderId, orderInfo: $orderInfo) {
+    status
+    errorMessage
+    errors { __typename }
+    atpError { __typename }
+    data {
+      order {
+        id
+        state
+        submitted
+      }
+      payments {
+        mutation { status }
+      }
+    }
+  }
+}`
+
+// SubmitOrder finalizes a reopened order using AH's checkout confirm mutation.
+func (c *Client) SubmitOrder(ctx context.Context, orderID int, opts OrderSubmitOptions) (*OrderSubmitResult, error) {
+	info, err := c.GetOrderSubmissionInfo(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if info.LastUserChangeTime == "" {
+		return nil, fmt.Errorf("order %d has no last user change timestamp", orderID)
+	}
+	if info.ValidationErrors > 0 || info.HasATPError {
+		return nil, fmt.Errorf("order %d has checkout validation errors", orderID)
+	}
+	if !info.ValueLimits.Submittable {
+		return nil, fmt.Errorf("order %d is not submittable", orderID)
+	}
+
+	channel := opts.Channel
+	if channel == "" {
+		channel = "IOS"
+	}
+
+	paymentMethod := opts.PaymentMethod
+	cardID := opts.DCTCardID
+	if paymentMethod == PaymentMethodAuto {
+		if cardID != "" {
+			paymentMethod = PaymentMethodDCT
+		} else {
+			card, err := c.GetDefaultDCTCard(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("auto payment requires an active default DCT card: %w", err)
+			}
+			paymentMethod = PaymentMethodDCT
+			cardID = card.CardID
+		}
+	}
+
+	orderInfo := map[string]any{
+		"channel":           channel,
+		"orderLastModified": info.LastUserChangeTime,
+		"paymentMethod":     string(paymentMethod),
+	}
+
+	switch paymentMethod {
+	case PaymentMethodDCT:
+		if cardID == "" {
+			card, err := c.GetDefaultDCTCard(ctx)
+			if err != nil {
+				return nil, err
+			}
+			cardID = card.CardID
+		}
+		orderInfo["dct"] = map[string]any{
+			"cardId":  cardID,
+			"payload": "",
+		}
+	case PaymentMethodPayAtDelivery:
+	default:
+		return nil, fmt.Errorf("unsupported payment method %q", paymentMethod)
+	}
+
+	type validationError struct {
+		TypeName string `json:"__typename"`
+	}
+	type submitResponse struct {
+		CheckoutConfirmOrderV4 struct {
+			Status       string            `json:"status"`
+			ErrorMessage string            `json:"errorMessage"`
+			Errors       []validationError `json:"errors"`
+			ATPError     *validationError  `json:"atpError"`
+			Data         *struct {
+				Order struct {
+					ID        int    `json:"id"`
+					State     string `json:"state"`
+					Submitted bool   `json:"submitted"`
+				} `json:"order"`
+				Payments []struct {
+					Mutation struct {
+						Status string `json:"status"`
+					} `json:"mutation"`
+				} `json:"payments"`
+			} `json:"data"`
+		} `json:"checkoutConfirmOrderV4"`
+	}
+
+	var resp submitResponse
+	vars := map[string]any{"orderId": orderID, "orderInfo": orderInfo}
+	if err := c.DoGraphQL(ctx, submitOrderMutation, vars, &resp); err != nil {
+		return nil, fmt.Errorf("submit order failed: %w", err)
+	}
+
+	raw := resp.CheckoutConfirmOrderV4
+	result := &OrderSubmitResult{
+		Status:           raw.Status,
+		ErrorMessage:     raw.ErrorMessage,
+		ValidationErrors: len(raw.Errors),
+		HasATPError:      raw.ATPError != nil,
+	}
+	if raw.Data != nil {
+		result.OrderID = raw.Data.Order.ID
+		result.OrderState = raw.Data.Order.State
+		result.Submitted = raw.Data.Order.Submitted
+		for _, payment := range raw.Data.Payments {
+			if payment.Mutation.Status != "" {
+				result.PaymentStatuses = append(result.PaymentStatuses, payment.Mutation.Status)
+			}
+		}
+	}
+
+	if result.Status != "SUCCESS" {
+		msg := result.ErrorMessage
+		if msg == "" {
+			msg = result.Status
+		}
+		return result, fmt.Errorf("submit order failed: %s", msg)
+	}
+
+	return result, nil
+}
+
 const reopenOrderMutation = `mutation OrderReopen($id: Int!) {
   orderReopen(id: $id) {
     status
@@ -327,8 +619,8 @@ func (c *Client) RevertOrder(ctx context.Context, orderID int) error {
 	return nil
 }
 
-const fulfillmentsQuery = `query OrderFulfillments {
-  orderFulfillments(status: OPEN) {
+const fulfillmentsQuery = `query OrderFulfillments($status: FulfillmentStatus!) {
+  orderFulfillments(status: $status) {
     result {
       orderId
       statusCode
@@ -385,8 +677,23 @@ type fulfillmentResult struct {
 // GetFulfillments retrieves all open (scheduled) order fulfillments.
 // These are orders that have been submitted and are awaiting delivery.
 func (c *Client) GetFulfillments(ctx context.Context) ([]Fulfillment, error) {
+	return c.GetFulfillmentsByStatus(ctx, FulfillmentStatusOpen)
+}
+
+// GetFulfillmentsByStatus retrieves order fulfillments for the requested status.
+func (c *Client) GetFulfillmentsByStatus(ctx context.Context, status FulfillmentStatus) ([]Fulfillment, error) {
+	if status == "" {
+		status = FulfillmentStatusOpen
+	}
+	switch status {
+	case FulfillmentStatusOpen, FulfillmentStatusClosed, FulfillmentStatusAll:
+	default:
+		return nil, fmt.Errorf("invalid fulfillment status %q", status)
+	}
+
 	var resp fulfillmentsResponse
-	if err := c.DoGraphQL(ctx, fulfillmentsQuery, nil, &resp); err != nil {
+	vars := map[string]any{"status": string(status)}
+	if err := c.DoGraphQL(ctx, fulfillmentsQuery, vars, &resp); err != nil {
 		return nil, fmt.Errorf("get fulfillments failed: %w", err)
 	}
 

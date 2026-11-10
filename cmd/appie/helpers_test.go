@@ -36,3 +36,57 @@ func TestFindList(t *testing.T) {
 		}
 	})
 }
+
+func TestOrderCommandListStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		cmd       orderCommand
+		want      appie.FulfillmentStatus
+		wantLabel string
+		wantErr   bool
+	}{
+		{
+			name:      "default open",
+			want:      appie.FulfillmentStatusOpen,
+			wantLabel: "open",
+		},
+		{
+			name:      "closed",
+			cmd:       orderCommand{Closed: true},
+			want:      appie.FulfillmentStatusClosed,
+			wantLabel: "closed",
+		},
+		{
+			name:      "all",
+			cmd:       orderCommand{All: true},
+			want:      appie.FulfillmentStatusAll,
+			wantLabel: "all",
+		},
+		{
+			name:    "closed and all conflict",
+			cmd:     orderCommand{Closed: true, All: true},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotLabel, err := tt.cmd.listStatus()
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("status = %q, want %q", got, tt.want)
+			}
+			if gotLabel != tt.wantLabel {
+				t.Fatalf("label = %q, want %q", gotLabel, tt.wantLabel)
+			}
+		})
+	}
+}

@@ -10,7 +10,9 @@ import (
 	appie "github.com/gwillem/appie-go"
 )
 
-type loginCommand struct{}
+type loginCommand struct {
+	Port int `long:"port" env:"APPIE_LOGIN_PORT" default:"0" description:"Fixed port for the local login page (http://localhost:<port>); 0 picks a random port"`
+}
 
 func (cmd *loginCommand) Execute(args []string) error {
 	configPath := globalOpts.Config
@@ -19,7 +21,7 @@ func (cmd *loginCommand) Execute(args []string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	client := appie.New(clientOpts()...)
+	client := appie.New(append(clientOpts(), appie.WithLoginPort(cmd.Port))...)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()

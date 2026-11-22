@@ -55,6 +55,7 @@ type Client struct {
 
 	configPath  string
 	openBrowser func(string) // overridable for testing; nil uses default
+	loginPort   int          // fixed port for the login proxy; 0 picks a random free port
 	logger      *log.Logger
 }
 
@@ -106,6 +107,16 @@ func WithSite(site string) Option {
 func WithLogger(l *log.Logger) Option {
 	return func(c *Client) {
 		c.logger = l
+	}
+}
+
+// WithLoginPort makes Login listen on a fixed port on 127.0.0.1 and serve the
+// login page at http://localhost:<port>, so the origin stays the same across
+// logins (e.g. for a password manager entry). Port 0 (the default) picks a
+// random free port.
+func WithLoginPort(port int) Option {
+	return func(c *Client) {
+		c.loginPort = port
 	}
 }
 

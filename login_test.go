@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -309,4 +310,35 @@ func TestCodeFromText(t *testing.T) {
 			t.Errorf("codeFromText(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+func TestLoginFixedPort(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+
+	client := New(WithLoginPort(port))
+	client.loginBaseURL = "http://127.0.0.1:1" // never reached
+	urlCh := make(chan string, 1)
+	client.openBrowser = func(u string) { urlCh <- u }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- client.Login(ctx) }()
+
+	u := <-urlCh
+	want := fmt.Sprintf("http://localhost:%d/secure/oauth/authorize?", port)
+	if !strings.HasPrefix(u, want) {
+		t.Errorf("login URL = %q, want prefix %q", u, want)
+	}
+	if c, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port)); err != nil {
+		t.Errorf("login server not listening on fixed port: %v", err)
+	} else {
+		c.Close()
+	}
+	cancel()
+	<-errCh
 }

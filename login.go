@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,12 +46,16 @@ const loginSuccessPage = `<!DOCTYPE html>
 //
 // Cancel the context to abort the login flow.
 func (c *Client) Login(ctx context.Context) error {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(c.loginPort)))
 	if err != nil {
 		return fmt.Errorf("failed to start login server: %w", err)
 	}
 
 	localOrigin := fmt.Sprintf("http://%s", listener.Addr())
+	if c.loginPort > 0 {
+		// A fixed port gets a stable, readable origin.
+		localOrigin = fmt.Sprintf("http://localhost:%d", c.loginPort)
+	}
 	doneURL := localOrigin + loginDonePath
 	codeCh := make(chan string, 1)
 	var codeTaken atomic.Bool

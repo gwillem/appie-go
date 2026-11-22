@@ -296,3 +296,17 @@ func TestLoginReadsCodeFromNextRedirect(t *testing.T) {
 		t.Errorf("expected 'next-access', got '%s'", client.accessToken)
 	}
 }
+
+func TestCodeFromText(t *testing.T) {
+	cases := map[string]string{
+		`1:"NEXT_REDIRECT;replace;appie://login-exit?code=abc123;307;"`: "abc123",
+		`{"url":"appie:\/\/login-exit?state=x&code=def456"}`:            "def456",
+		`appie://login-exit?code=ghi789&state=1`:                        "ghi789",
+		`<a href="https://login.ah.nl/ingelogd">no redirect here</a>`:   "",
+	}
+	for in, want := range cases {
+		if got := codeFromText(in); got != want {
+			t.Errorf("codeFromText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

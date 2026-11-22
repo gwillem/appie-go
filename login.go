@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -105,6 +107,18 @@ func (c *Client) Login(ctx context.Context) error {
 			if codeTaken.Load() && resp.Request.URL.Path == "/login/ingelogd" {
 				redirectTo(resp, doneURL)
 				return nil
+			}
+			// Newer AH login pages (Next.js App Router) deliver the redirect in
+			// a React Server Component response or a redirect header instead
+			// of ingelogd.json, so look for the code there too.
+			if !codeTaken.Load() {
+				if code, where, err := sniffAppieCode(resp, c.logger); err != nil {
+					return err
+				} else if code != "" {
+					c.logger.Printf("authorization code found in %s", where)
+					deliverCode(codeCh, code)
+					codeTaken.Store(true)
+				}
 			}
 			if strings.HasSuffix(resp.Request.URL.Path, "/ingelogd.json") {
 				if err := takeNextRedirectCode(resp, codeCh, &codeTaken, doneURL); err != nil {
@@ -273,7 +287,7 @@ func rewriteLoginResponse(resp *http.Response, localOrigin, targetHost string) e
 
 	// Only rewrite text response bodies
 	ct := resp.Header.Get("Content-Type")
-	if !strings.Contains(ct, "text/html") && !strings.Contains(ct, "javascript") && !strings.Contains(ct, "json") {
+	if !strings.Contains(ct, "text/html") && !strings.Contains(ct, "javascript") && !strings.Contains(ct, "json") && !strings.Contains(ct, "text/x-component") {
 		return nil
 	}
 
@@ -337,4 +351,54 @@ func openDefaultBrowser(url string) {
 		return
 	}
 	_ = cmd.Start()
+}
+
+// appieRedirectRe matches an appie://login-exit redirect with its query, also
+// when the slashes are JSON-escaped (appie:\/\/login-exit).
+var appieRedirectRe = regexp.MustCompile(`appie:(?:\\?/){2}login-exit\?([^"'\s;<>\\]*(?:\\u0026[^"'\s;<>\\]*)*)`)
+
+// sniffAppieCode looks for an appie://login-exit?code=... redirect in the
+// response headers and, for React Server Component responses, in the body. It
+// returns the code and where it was found. The body is restored afterwards.
+func sniffAppieCode(resp *http.Response, logger *log.Logger) (code, where string, err error) {
+	for name, values := range resp.Header {
+		for _, v := range values {
+			if c := codeFromText(v); c != "" {
+				return c, "header " + name, nil
+			}
+		}
+	}
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/x-component") {
+		return "", "", nil
+	}
+	body, err := readResponseBody(resp)
+	if err != nil {
+		return "", "", err
+	}
+	setResponseBody(resp, body)
+	if resp.Request.URL.Path == "/login/ingelogd" {
+		names := make([]string, 0, len(resp.Header))
+		for name := range resp.Header {
+			names = append(names, name)
+		}
+		logger.Printf("ingelogd RSC: %d bytes, headers %v, contains login-exit=%v",
+			len(body), names, bytes.Contains(body, []byte("login-exit")))
+	}
+	if c := codeFromText(string(body)); c != "" {
+		return c, "RSC body of " + resp.Request.URL.Path, nil
+	}
+	return "", "", nil
+}
+
+// codeFromText returns the code from the first appie://login-exit redirect in s.
+func codeFromText(s string) string {
+	m := appieRedirectRe.FindStringSubmatch(s)
+	if m == nil {
+		return ""
+	}
+	q, err := url.ParseQuery(strings.ReplaceAll(m[1], `&`, "&"))
+	if err != nil {
+		return ""
+	}
+	return q.Get("code")
 }

@@ -130,6 +130,8 @@ appie list rm <list-id> <product-id>   # remove product
 
 Config is stored at `~/.config/appie/config.json` (or `$XDG_CONFIG_HOME/appie/config.json`). Override with `-c`.
 
+For Albert Heijn Belgium (ah.be), log in with `appie --site be login`. The site is saved in the config, so later commands use ah.be without the flag.
+
 ## Notes
 
 - Rate limiting may apply. AH does not send back-off headers, so the practical rate limit is unknown.

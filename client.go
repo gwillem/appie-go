@@ -44,6 +44,7 @@ type Client struct {
 	userAgent     string
 	clientID      string
 	clientVersion string
+	site          string // set by WithSite and saved in the config file; empty means no site was chosen (nl)
 
 	mu           sync.RWMutex
 	accessToken  string
@@ -85,15 +86,19 @@ func WithTokens(accessToken, refreshToken string) Option {
 
 // WithSite configures site-specific hosts and application headers.
 // Supported values: "nl" and "be". Any other value falls back to "nl".
+// The site is saved in the config file; NewWithConfig uses the saved site
+// when neither WithSite nor WithBaseURL is given.
 func WithSite(site string) Option {
 	return func(c *Client) {
 		switch strings.ToLower(strings.TrimSpace(site)) {
 		case "be":
+			c.site = "be"
 			c.baseURL = "https://api.ah.be"
 			c.loginBaseURL = "https://login.ah.be"
 			c.application = "AHBEWEBSHOP"
 			c.clientID = clientIDForSite("be")
 		default:
+			c.site = defaultSite
 			c.baseURL = defaultBaseURL
 			c.loginBaseURL = defaultLoginBaseURL
 			c.application = defaultApplication
@@ -188,6 +193,11 @@ func (c *Client) loadConfig() error {
 	c.expiresAt = cfg.ExpiresAt
 	c.mu.Unlock()
 
+	// Explicit options win over the saved site.
+	if c.site == "" && c.baseURL == defaultBaseURL && cfg.Site != "" {
+		WithSite(cfg.Site)(c)
+	}
+
 	return nil
 }
 
@@ -203,6 +213,7 @@ func (c *Client) saveConfig() error {
 		RefreshToken: c.refreshToken,
 		MemberID:     c.memberID,
 		ExpiresAt:    c.expiresAt,
+		Site:         c.site,
 	}
 	c.mu.RUnlock()
 
@@ -291,7 +302,7 @@ func (c *Client) DoRequest(ctx context.Context, method, path string, body, resul
 	}
 	defer resp.Body.Close()
 
-	c.logger.Printf("%s %s %d %s", method, path, resp.StatusCode, time.Since(start).Truncate(time.Millisecond))
+	c.logger.Printf("%s %s %d %s", method, req.URL.Redacted(), resp.StatusCode, time.Since(start).Truncate(time.Millisecond))
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

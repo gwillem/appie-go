@@ -19,7 +19,11 @@ func (cmd *loginCommand) Execute(args []string) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	client := appie.New(clientOpts()...)
+	// Keep the saved site when logging in again without --site.
+	client, err := appie.NewWithConfig(configPath, clientOpts()...)
+	if err != nil {
+		client = appie.New(clientOpts()...)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()

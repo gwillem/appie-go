@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,49 @@ func TestNewWithConfigMissing(t *testing.T) {
 	}
 	if client == nil {
 		t.Fatal("expected client even with missing config")
+	}
+}
+
+func TestSiteSavedInConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		saveOpts  []Option // options of the client that writes the config
+		loadOpts  []Option // options passed to NewWithConfig
+		wantURL   string
+		wantSaved string // site field in the written config
+	}{
+		{"saved be is used", []Option{WithSite("be")}, nil, "https://api.ah.be", "be"},
+		{"explicit site wins", []Option{WithSite("be")}, []Option{WithSite("nl")}, defaultBaseURL, "be"},
+		{"explicit base URL wins", []Option{WithSite("be")}, []Option{WithBaseURL("http://mock")}, "http://mock", "be"},
+		{"no site saved stays nl", nil, nil, defaultBaseURL, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := New(append([]Option{WithConfigPath(path)}, tt.saveOpts...)...).saveConfig(); err != nil {
+				t.Fatal(err)
+			}
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cfg config
+			if err := json.Unmarshal(data, &cfg); err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Site != tt.wantSaved {
+				t.Errorf("saved site = %q, want %q", cfg.Site, tt.wantSaved)
+			}
+
+			client, err := NewWithConfig(path, tt.loadOpts...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if client.baseURL != tt.wantURL {
+				t.Errorf("baseURL = %q, want %q", client.baseURL, tt.wantURL)
+			}
+		})
 	}
 }
 
@@ -214,8 +258,8 @@ func TestWithLoggerLogsRequests(t *testing.T) {
 	if !strings.Contains(output, "GET") {
 		t.Errorf("expected verbose output to contain method, got %q", output)
 	}
-	if !strings.Contains(output, "/test-endpoint") {
-		t.Errorf("expected verbose output to contain path, got %q", output)
+	if !strings.Contains(output, srv.URL+"/test-endpoint") {
+		t.Errorf("expected verbose output to contain host and path, got %q", output)
 	}
 	if !strings.Contains(output, "200") {
 		t.Errorf("expected verbose output to contain status code, got %q", output)
